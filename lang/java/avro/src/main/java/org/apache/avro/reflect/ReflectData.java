@@ -690,6 +690,14 @@ public class ReflectData extends SpecificData {
       AvroSchema explicit = c.getAnnotation(AvroSchema.class);
       if (explicit != null) // explicit schema
         return new Schema.Parser().parse(explicit.value());
+      AvroEncode custom = c.getAnnotation(AvroEncode.class);
+      if (custom != null) {
+        try {
+          return custom.using().getDeclaredConstructor().newInstance().getSchema();
+        } catch (ReflectiveOperationException e) {
+          throw new AvroRuntimeException(e);
+        }
+      }
       if (CharSequence.class.isAssignableFrom(c)) // String
         return Schema.create(Schema.Type.STRING);
       if (ByteBuffer.class.isAssignableFrom(c)) // bytes
