@@ -83,7 +83,7 @@ public class ReflectRecordEncoding extends CustomEncoding {
 
   @Override
   protected Object read(Object reuse, Decoder in) throws IOException {
-    throw new UnsupportedOperationException("No writer specified");
+    throw new UnsupportedOperationException("No reader specified");
   }
 
   @Override

@@ -71,6 +71,7 @@ public class ReflectDatumReader<T> extends SpecificDatumReader<T> {
   }
 
   /** Called to read data. */
+  @Override
   protected Object read(Object old, Schema expected, ResolvingDecoder in) throws IOException {
     return super.read(old, expected, in);
   }
