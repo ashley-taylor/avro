@@ -75,7 +75,7 @@ public class SpecificData extends GenericData {
     } catch (NoSuchMethodException e) {
       isRecord = null;
     }
-    IS_RECORD = isRecord;
+    IS_RECORD_METHOD = isRecord;
 
   }
 
@@ -325,7 +325,7 @@ public class SpecificData extends GenericData {
     try {
       if (customEncode != null) {
         return customEncode.using().getDeclaredConstructor().newInstance();
-      } else if (IS_RECORD != null && IS_RECORD.invoke(c).equals(true)) {
+      } else if (IS_RECORD_METHOD != null && IS_RECORD_METHOD.invoke(c).equals(true)) {
         return new ReflectRecordEncoding(schema, c);
       }
     } catch (ReflectiveOperationException e) {
