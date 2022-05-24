@@ -65,7 +65,7 @@ public class SpecificData extends GenericData {
   private static final Class<?>[] NO_ARG = new Class[] {};
   private static final Class<?>[] SCHEMA_ARG = new Class[] { Schema.class };
 
-  private static final Method IS_RECORD;
+  private static final Method IS_RECORD_METHOD;
 
   static {
     Class<? extends Class> classClass = SpecificData.class.getClass();
