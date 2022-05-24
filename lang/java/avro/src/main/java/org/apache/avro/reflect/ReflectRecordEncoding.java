@@ -74,7 +74,7 @@ public class ReflectRecordEncoding extends CustomEncoding {
     }
 
     try {
-      this.constructor = type.getDeclaredConstructor(parameterTypes.toArray(Class[]::new));
+      this.constructor = type.getDeclaredConstructor(parameterTypes.toArray(new Class[0]));
     } catch (NoSuchMethodException e) {
       throw new RuntimeException(e);
     }
