@@ -301,8 +301,27 @@ public class SpecificData extends GenericData {
     }
   }
 
-  private CustomEncoding<?> extractCustomEncoder(Schema schema, Class<?> c) {
-    AvroEncode customEncode = c.getAnnotation(AvroEncode.class);
+  protected static AvroEncode getAvroEncode(Class<?> c) {
+    while (c != null && !c.equals(Object.class)) {
+      AvroEncode avroEncode = c.getAnnotation(AvroEncode.class);
+      if (avroEncode != null) {
+        return avroEncode;
+      }
+      for (Class<?> inter : c.getInterfaces()) {
+        avroEncode = getAvroEncode(inter);
+        if (avroEncode != null) {
+          return avroEncode;
+        }
+      }
+      c = c.getSuperclass();
+    }
+
+    return null;
+
+  }
+
+  private static CustomEncoding<?> extractCustomEncoder(Schema schema, Class<?> c) {
+    AvroEncode customEncode = getAvroEncode(c);
     try {
       if (customEncode != null) {
         return customEncode.using().getDeclaredConstructor().newInstance();

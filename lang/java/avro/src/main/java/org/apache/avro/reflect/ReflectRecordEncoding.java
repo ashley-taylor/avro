@@ -1,9 +1,25 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.avro.reflect;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,12 +45,15 @@ public class ReflectRecordEncoding extends CustomEncoding {
 
     this.writer = schema.getFields().stream().map(field -> {
       try {
-        Method method = type.getMethod(field.name());
-        return new FieldWriter(method, field.schema());
+        Field classField = type.getDeclaredField(field.name());
+        classField.setAccessible(true);
+        AvroEncode enc = classField.getAnnotation(AvroEncode.class);
+        if (enc != null)
+          return new CustomEncodedFieldWriter(classField, enc.using().getDeclaredConstructor().newInstance());
+        return new ReflectFieldWriter(classField, field.schema());
       } catch (ReflectiveOperationException e) {
         throw new AvroMissingFieldException("Field does not exist", field);
       }
-
     }).collect(Collectors.toList());
 
     // order of this matches default constructor find order mapping
@@ -56,17 +75,23 @@ public class ReflectRecordEncoding extends CustomEncoding {
 
     try {
       this.constructor = type.getDeclaredConstructor(parameterTypes.toArray(Class[]::new));
-
     } catch (NoSuchMethodException e) {
-      throw new AvroRuntimeException(e);
+      throw new RuntimeException(e);
     }
 
     this.reader = schema.getFields().stream().map(field -> {
       int offset = offsets.get(field.name());
-      return new FieldReader(offset, field.schema());
 
+      try {
+        Field classField = type.getDeclaredField(field.name());
+        AvroEncode enc = classField.getAnnotation(AvroEncode.class);
+        if (enc != null)
+          return new CustomEncodedFieldReader(offset, enc.using().getDeclaredConstructor().newInstance());
+        return new ReflectFieldReader(offset, field.schema());
+      } catch (ReflectiveOperationException e) {
+        throw new AvroRuntimeException("Could not instantiate custom Encoding");
+      }
     }).collect(Collectors.toList());
-
   }
 
   @Override
@@ -98,43 +123,91 @@ public class ReflectRecordEncoding extends CustomEncoding {
     try {
       return this.constructor.newInstance(args);
     } catch (ReflectiveOperationException e) {
-      throw new AvroRuntimeException(e);
+      throw new RuntimeException();
     }
   }
 
-  private static class FieldWriter {
-    private final Method method;
+  private interface FieldWriter {
+    void write(Object datum, Encoder out, ReflectDatumWriter writer) throws IOException;
+  }
+
+  private static class ReflectFieldWriter implements FieldWriter {
+
+    private final Field field;
     private final Schema schema;
 
-    public FieldWriter(Method method, Schema schema) {
-      this.method = method;
+    public ReflectFieldWriter(Field field, Schema schema) {
+      this.field = field;
       this.schema = schema;
     }
 
-    void write(Object datum, Encoder out, ReflectDatumWriter writer) throws IOException {
+    @Override
+    public void write(Object datum, Encoder out, ReflectDatumWriter writer) throws IOException {
       try {
-        Object obj = method.invoke(datum);
+        Object obj = field.get(datum);
         writer.write(schema, obj, out);
       } catch (ReflectiveOperationException e) {
         throw new AvroRuntimeException("Could not invoke", e);
       }
-
     }
   }
 
-  private static class FieldReader {
+  private static class CustomEncodedFieldWriter implements FieldWriter {
+
+    private final Field field;
+    private final CustomEncoding<?> encoding;
+
+    public CustomEncodedFieldWriter(Field field, CustomEncoding<?> encoding) {
+      this.field = field;
+      this.encoding = encoding;
+    }
+
+    @Override
+    public void write(Object datum, Encoder out, ReflectDatumWriter writer) throws IOException {
+      try {
+        Object obj = field.get(datum);
+        encoding.write(obj, out);
+      } catch (ReflectiveOperationException e) {
+        throw new AvroRuntimeException("Could not invoke", e);
+      }
+    }
+  }
+
+  private interface FieldReader {
+    public void read(ResolvingDecoder in, ReflectDatumReader reader, Object[] constructorArgs) throws IOException;
+  }
+
+  private static class ReflectFieldReader implements FieldReader {
+
     private final int constructorOffset;
     private final Schema schema;
 
-    public FieldReader(int constructorOffset, Schema schema) {
+    public ReflectFieldReader(int constructorOffset, Schema schema) {
       this.constructorOffset = constructorOffset;
       this.schema = schema;
     }
 
-    void read(ResolvingDecoder in, ReflectDatumReader reader, Object[] constructorArgs) throws IOException {
+    @Override
+    public void read(ResolvingDecoder in, ReflectDatumReader reader, Object[] constructorArgs) throws IOException {
       Object obj = reader.read(null, schema, in);
       constructorArgs[constructorOffset] = obj;
     }
   }
 
+  private static class CustomEncodedFieldReader implements FieldReader {
+
+    private final int constructorOffset;
+    private final CustomEncoding<?> encoding;
+
+    public CustomEncodedFieldReader(int constructorOffset, CustomEncoding<?> encoding) {
+      this.constructorOffset = constructorOffset;
+      this.encoding = encoding;
+    }
+
+    @Override
+    public void read(ResolvingDecoder in, ReflectDatumReader reader, Object[] constructorArgs) throws IOException {
+      Object obj = encoding.read(in);
+      constructorArgs[constructorOffset] = obj;
+    }
+  }
 }
