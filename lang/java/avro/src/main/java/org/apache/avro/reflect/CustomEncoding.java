@@ -57,4 +57,8 @@ public abstract class CustomEncoding<T> {
     return schema;
   }
 
+  public CustomEncoding<T> setSchema(Schema schema) {
+    return this;
+  }
+
 }

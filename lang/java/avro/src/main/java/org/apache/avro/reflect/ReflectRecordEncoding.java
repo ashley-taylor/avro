@@ -34,15 +34,23 @@ import org.apache.avro.io.Decoder;
 import org.apache.avro.io.Encoder;
 import org.apache.avro.io.ResolvingDecoder;
 
-public class ReflectRecordEncoding extends CustomEncoding {
+public class ReflectRecordEncoding extends CustomEncoding<Object> {
 
+  private final Class<?> type;
   private final List<FieldWriter> writer;
   private final Constructor<?> constructor;
   private List<FieldReader> reader;
 
-  public ReflectRecordEncoding(Schema schema, Class<?> type) {
-    this.schema = schema;
+  public ReflectRecordEncoding(Class<?> type) {
+    this.type = type;
+    this.writer = null;
+    this.constructor = null;
 
+  }
+
+  public ReflectRecordEncoding(Class<?> type, Schema schema) {
+    this.type = type;
+    this.schema = schema;
     this.writer = schema.getFields().stream().map(field -> {
       try {
         Field classField = type.getDeclaredField(field.name());
@@ -92,6 +100,11 @@ public class ReflectRecordEncoding extends CustomEncoding {
         throw new AvroRuntimeException("Could not instantiate custom Encoding");
       }
     }).collect(Collectors.toList());
+  }
+
+  @Override
+  public CustomEncoding<Object> setSchema(Schema schema) {
+    return new ReflectRecordEncoding(type, schema);
   }
 
   @Override

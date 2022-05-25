@@ -301,9 +301,15 @@ public class SpecificData extends GenericData {
     }
   }
 
-  protected static AvroEncode getAvroEncode(Class<?> c) {
+  private static AvroEncode getAvroEncode(Class<?> c) {
     while (c != null && !c.equals(Object.class)) {
       AvroEncode avroEncode = c.getAnnotation(AvroEncode.class);
+      if (avroEncode != null) {
+        return avroEncode;
+      }
+      if (c.getSuperclass() != null) {
+        avroEncode = getAvroEncode(c.getSuperclass());
+      }
       if (avroEncode != null) {
         return avroEncode;
       }
@@ -320,13 +326,32 @@ public class SpecificData extends GenericData {
 
   }
 
-  private static CustomEncoding<?> extractCustomEncoder(Schema schema, Class<?> c) {
-    AvroEncode customEncode = getAvroEncode(c);
+  protected static CustomEncoding<?> getCustomEncoding(Class<?> c) {
     try {
-      if (customEncode != null) {
-        return customEncode.using().getDeclaredConstructor().newInstance();
+      AvroEncode avroEncode = getAvroEncode(c);
+      if (avroEncode != null) {
+        // first see if constructor that takes the class as an argument exists
+        try {
+          return avroEncode.using().getDeclaredConstructor(Class.class).newInstance(c);
+        } catch (NoSuchMethodException e) {
+          // zero argument constructor
+          return avroEncode.using().getDeclaredConstructor().newInstance();
+        }
+      } else {
+        return null;
+      }
+    } catch (ReflectiveOperationException e) {
+      throw new AvroRuntimeException(e);
+    }
+  }
+
+  private static CustomEncoding<?> extractCustomEncoder(Schema schema, Class<?> c) {
+    CustomEncoding<?> customEncoding = getCustomEncoding(c);
+    try {
+      if (customEncoding != null) {
+        return customEncoding.setSchema(schema);
       } else if (IS_RECORD_METHOD != null && IS_RECORD_METHOD.invoke(c).equals(true)) {
-        return new ReflectRecordEncoding(schema, c);
+        return new ReflectRecordEncoding(c).setSchema(schema);
       }
     } catch (ReflectiveOperationException e) {
       throw new AvroRuntimeException(e);
