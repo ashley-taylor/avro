@@ -471,6 +471,13 @@
         <hadoop.version>2.10.1</hadoop.version>
       </properties>
     </profile>
+    <profile>
+      <id>java17</id>
+      <modules>
+	    <module>avro</module>
+      	<module>java17-test</module>
+      </modules>
+    </profile>
   </profiles>
 
   <!-- dependencyManagement can be used to define dependency versions, scopes, and
