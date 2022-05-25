@@ -74,8 +74,7 @@ public class TestJavaRecordEncoder {
     }
   }
 
-  @AvroEncode(using = ReflectRecordEncoding.class)
-  public static record Custom(String field) {}
-
+  public static record Custom(String field) {
+  }
 
 }
