@@ -349,8 +349,12 @@ public class SpecificData extends GenericData {
     CustomEncoding<?> customEncoding = getCustomEncoding(c);
     try {
       if (customEncoding != null) {
-        return customEncoding.setSchema(schema);
-      } else if (IS_RECORD_METHOD != null && IS_RECORD_METHOD.invoke(c).equals(true)) {
+        customEncoding = customEncoding.setSchema(schema);
+        if (customEncoding != null) {
+          return customEncoding;
+        }
+      }
+      if (IS_RECORD_METHOD != null && IS_RECORD_METHOD.invoke(c).equals(true)) {
         return new ReflectRecordEncoding(c).setSchema(schema);
       }
     } catch (ReflectiveOperationException e) {

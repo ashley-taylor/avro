@@ -708,86 +708,92 @@ public class ReflectData extends SpecificData {
       String fullName = c.getName();
       Schema schema = names.get(fullName);
       if (schema == null) {
-        AvroDoc annotatedDoc = c.getAnnotation(AvroDoc.class); // Docstring
-        String doc = (annotatedDoc != null) ? annotatedDoc.value() : null;
-        String name = c.getSimpleName();
-        String space = c.getPackage() == null ? "" : c.getPackage().getName();
-        if (c.getEnclosingClass() != null) // nested class
-          space = c.getEnclosingClass().getName().replace('$', '.');
-        Union union = c.getAnnotation(Union.class);
-        if (union != null) { // union annotated
-          return getAnnotatedUnion(union, names);
-        } else if (isStringable(c)) { // Stringable
-          Schema result = Schema.create(Schema.Type.STRING);
-          result.addProp(CLASS_PROP, c.getName());
-          return result;
-        } else if (c.isEnum()) { // Enum
-          List<String> symbols = new ArrayList<>();
-          Enum[] constants = (Enum[]) c.getEnumConstants();
-          for (Enum constant : constants)
-            symbols.add(constant.name());
-          schema = Schema.createEnum(name, doc, space, symbols);
-          consumeAvroAliasAnnotation(c, schema);
-        } else if (GenericFixed.class.isAssignableFrom(c)) { // fixed
-          int size = c.getAnnotation(FixedSize.class).value();
-          schema = Schema.createFixed(name, doc, space, size);
-          consumeAvroAliasAnnotation(c, schema);
-        } else if (IndexedRecord.class.isAssignableFrom(c)) { // specific
-          return super.createSchema(type, names);
-        } else { // record
-          List<Schema.Field> fields = new ArrayList<>();
-          boolean error = Throwable.class.isAssignableFrom(c);
-          schema = Schema.createRecord(name, doc, space, error);
-          consumeAvroAliasAnnotation(c, schema);
-          names.put(c.getName(), schema);
-          for (Field field : getCachedFields(c))
-            if ((field.getModifiers() & (Modifier.TRANSIENT | Modifier.STATIC)) == 0
-                && !field.isAnnotationPresent(AvroIgnore.class)) {
-              Schema fieldSchema = createFieldSchema(field, names);
-              annotatedDoc = field.getAnnotation(AvroDoc.class); // Docstring
-              doc = (annotatedDoc != null) ? annotatedDoc.value() : null;
-
-              Object defaultValue = createSchemaDefaultValue(type, field, fieldSchema);
-
-              AvroName annotatedName = field.getAnnotation(AvroName.class); // Rename fields
-              String fieldName = (annotatedName != null) ? annotatedName.value() : field.getName();
-              if (STRING_OUTER_PARENT_REFERENCE.equals(fieldName)) {
-                throw new AvroTypeException("Class " + fullName + " must be a static inner class");
-              }
-              Schema.Field recordField = new Schema.Field(fieldName, fieldSchema, doc, defaultValue);
-
-              AvroMeta[] metadata = field.getAnnotationsByType(AvroMeta.class); // add metadata
-              for (AvroMeta meta : metadata) {
-                if (recordField.getObjectProps().containsKey(meta.key())) {
-                  throw new AvroTypeException("Duplicate field prop key: " + meta.key());
-                }
-                recordField.addProp(meta.key(), meta.value());
-              }
-              for (Schema.Field f : fields) {
-                if (f.name().equals(fieldName))
-                  throw new AvroTypeException("double field entry: " + fieldName);
-              }
-
-              consumeFieldAlias(field, recordField);
-
-              fields.add(recordField);
-            }
-          if (error) // add Throwable message
-            fields.add(new Schema.Field("detailMessage", THROWABLE_MESSAGE, null, null));
-          schema.setFields(fields);
-          AvroMeta[] metadata = c.getAnnotationsByType(AvroMeta.class);
-          for (AvroMeta meta : metadata) {
-            if (schema.getObjectProps().containsKey(meta.key())) {
-              throw new AvroTypeException("Duplicate type prop key: " + meta.key());
-            }
-            schema.addProp(meta.key(), meta.value());
-          }
-        }
+        schema = createSchemaViaReflection(c, names);
         names.put(fullName, schema);
       }
       return schema;
     }
     return super.createSchema(type, names);
+  }
+
+  protected Schema createSchemaViaReflection(Class<?> c, Map<String, Schema> names) {
+    Schema schema;
+    AvroDoc annotatedDoc = c.getAnnotation(AvroDoc.class); // Docstring
+    String doc = (annotatedDoc != null) ? annotatedDoc.value() : null;
+    String name = c.getSimpleName();
+    String space = c.getPackage() == null ? "" : c.getPackage().getName();
+    if (c.getEnclosingClass() != null) // nested class
+      space = c.getEnclosingClass().getName().replace('$', '.');
+    Union union = c.getAnnotation(Union.class);
+    if (union != null) { // union annotated
+      return getAnnotatedUnion(union, names);
+    } else if (isStringable(c)) { // Stringable
+      Schema result = Schema.create(Schema.Type.STRING);
+      result.addProp(CLASS_PROP, c.getName());
+      return result;
+    } else if (c.isEnum()) { // Enum
+      List<String> symbols = new ArrayList<>();
+      Enum[] constants = (Enum[]) c.getEnumConstants();
+      for (Enum constant : constants)
+        symbols.add(constant.name());
+      schema = Schema.createEnum(name, doc, space, symbols);
+      consumeAvroAliasAnnotation(c, schema);
+    } else if (GenericFixed.class.isAssignableFrom(c)) { // fixed
+      int size = c.getAnnotation(FixedSize.class).value();
+      schema = Schema.createFixed(name, doc, space, size);
+      consumeAvroAliasAnnotation(c, schema);
+    } else if (IndexedRecord.class.isAssignableFrom(c)) { // specific
+      return super.createSchema(c, names);
+    } else { // record
+      List<Schema.Field> fields = new ArrayList<>();
+      boolean error = Throwable.class.isAssignableFrom(c);
+      schema = Schema.createRecord(name, doc, space, error);
+      consumeAvroAliasAnnotation(c, schema);
+      names.put(c.getName(), schema);
+      for (Field field : getCachedFields(c))
+        if ((field.getModifiers() & (Modifier.TRANSIENT | Modifier.STATIC)) == 0
+            && !field.isAnnotationPresent(AvroIgnore.class)) {
+          Schema fieldSchema = createFieldSchema(field, names);
+          annotatedDoc = field.getAnnotation(AvroDoc.class); // Docstring
+          doc = (annotatedDoc != null) ? annotatedDoc.value() : null;
+
+          Object defaultValue = createSchemaDefaultValue(c, field, fieldSchema);
+
+          AvroName annotatedName = field.getAnnotation(AvroName.class); // Rename fields
+          String fieldName = (annotatedName != null) ? annotatedName.value() : field.getName();
+          if (STRING_OUTER_PARENT_REFERENCE.equals(fieldName)) {
+            throw new AvroTypeException("Class " + c.getName() + " must be a static inner class");
+          }
+          Schema.Field recordField = new Schema.Field(fieldName, fieldSchema, doc, defaultValue);
+
+          AvroMeta[] metadata = field.getAnnotationsByType(AvroMeta.class); // add metadata
+          for (AvroMeta meta : metadata) {
+            if (recordField.getObjectProps().containsKey(meta.key())) {
+              throw new AvroTypeException("Duplicate field prop key: " + meta.key());
+            }
+            recordField.addProp(meta.key(), meta.value());
+          }
+          for (Schema.Field f : fields) {
+            if (f.name().equals(fieldName))
+              throw new AvroTypeException("double field entry: " + fieldName);
+          }
+
+          consumeFieldAlias(field, recordField);
+
+          fields.add(recordField);
+        }
+      if (error) // add Throwable message
+        fields.add(new Schema.Field("detailMessage", THROWABLE_MESSAGE, null, null));
+      schema.setFields(fields);
+      AvroMeta[] metadata = c.getAnnotationsByType(AvroMeta.class);
+      for (AvroMeta meta : metadata) {
+        if (schema.getObjectProps().containsKey(meta.key())) {
+          throw new AvroTypeException("Duplicate type prop key: " + meta.key());
+        }
+        schema.addProp(meta.key(), meta.value());
+      }
+    }
+    return schema;
   }
 
   @Override
