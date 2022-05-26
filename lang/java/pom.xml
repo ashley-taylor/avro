@@ -86,6 +86,7 @@
     <module>grpc</module>
     <module>integration-test</module>
     <module>perf</module>
+    <module>java17-test</module>
   </modules>
 
   <build>
@@ -470,13 +471,6 @@
       <properties>
         <hadoop.version>2.10.1</hadoop.version>
       </properties>
-    </profile>
-    <profile>
-      <id>java17</id>
-      <modules>
-	    <module>avro</module>
-      	<module>java17-test</module>
-      </modules>
     </profile>
   </profiles>
 

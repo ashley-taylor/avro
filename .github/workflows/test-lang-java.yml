@@ -75,7 +75,12 @@ jobs:
         run: ./build.sh lint
 
       - name: Test
+        if: matrix.java < 17
         run: ./build.sh test
+
+      - name: Test Java >= 17
+        if: matrix.java >= 17
+        run: ./build.sh testJava17
 
   interop:
     name: Java ${{ matrix.java }} Interop
@@ -149,42 +154,3 @@ jobs:
       - name: Run Interop Tests
         working-directory: lang/java/ipc
         run: mvn -B test -P interop-data-test
-
-  testJava17:
-    name: Java ${{ matrix.java }} Test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        java:
-        - '17'
-        - '18'
-        - '19'
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Cache Local Maven Repository
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-
-      - name: Setup Temurin JDK
-        if: matrix.java == '17'
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'temurin'
-          java-version: ${{ matrix.java }}
-
-      - name: Setup Oracle JDK
-        if: matrix.java == '18' || matrix.java == '19'
-        uses: oracle-actions/setup-java@v1
-        with:
-          website: jdk.java.net
-          release: ${{ matrix.java }}
-          version: latest
-
-      - name: Run Interop Tests
-        working-directory: lang/java
-        run: mvn -B test -P java17
