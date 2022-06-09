@@ -664,5 +664,9 @@ public class SpecificData extends GenericData {
       return customEncoding;
     }
   }
+  /** Needed for simulating schema change during test. */
+  protected void removeFromSchemaClassCache(Class<?> c) {
+    schemaClassCache.remove(c);
+  }
 
 }
