@@ -20,22 +20,10 @@ package org.apache.avro.perf.test;
 
 import java.util.Random;
 
-public record BasicJavaRecord(double f1,
- double f2,
- double f3,
- int f4,
- int f5,
- int f6) {
-
-
+public record BasicJavaRecord(double f1, double f2, double f3, int f4, int f5, int f6) {
 
   public BasicJavaRecord(final Random r) {
 
-    this(r.nextDouble(),
-     r.nextDouble(),
-     r.nextDouble(),
-     r.nextInt(),
-     r.nextInt(),
-     r.nextInt());
+    this(r.nextDouble(), r.nextDouble(), r.nextDouble(), r.nextInt(), r.nextInt(), r.nextInt());
   }
 }
