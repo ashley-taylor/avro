@@ -69,25 +69,25 @@ import java.util.concurrent.ConcurrentMap;
 
 /** Utilities to use existing Java classes and interfaces via reflection. */
 public class ReflectData extends SpecificData {
-	
-	  private static final Method IS_SEALED_METHOD;
-	  private static final Method GET_PERMITTED_SUBCLASSES_METHOD;
 
-	  static {
-	    Class<? extends Class> classClass = SpecificData.class.getClass();
-	    Method isSealed;
-	    Method getPermittedSubclasses;
-	    try {
-	      isSealed = classClass.getMethod("isSealed");
-	      getPermittedSubclasses = classClass.getMethod("getPermittedSubclasses");
-	    } catch (NoSuchMethodException e) {
-	      isSealed = null;
-	      getPermittedSubclasses = null;
-	    }
-	    IS_SEALED_METHOD = isSealed;
-	    GET_PERMITTED_SUBCLASSES_METHOD = getPermittedSubclasses;
+  private static final Method IS_SEALED_METHOD;
+  private static final Method GET_PERMITTED_SUBCLASSES_METHOD;
 
-	  }
+  static {
+    Class<? extends Class> classClass = SpecificData.class.getClass();
+    Method isSealed;
+    Method getPermittedSubclasses;
+    try {
+      isSealed = classClass.getMethod("isSealed");
+      getPermittedSubclasses = classClass.getMethod("getPermittedSubclasses");
+    } catch (NoSuchMethodException e) {
+      isSealed = null;
+      getPermittedSubclasses = null;
+    }
+    IS_SEALED_METHOD = isSealed;
+    GET_PERMITTED_SUBCLASSES_METHOD = getPermittedSubclasses;
+
+  }
 
   private static final String STRING_OUTER_PARENT_REFERENCE = "this$0";
 
@@ -841,25 +841,25 @@ public class ReflectData extends SpecificData {
     if (union != null) // element is annotated union
       schema.addProp(ELEMENT_PROP, c.getName());
   }
-  
+
   private Class[] getUnion(AnnotatedElement element) {
-	  Union union = element.getAnnotation(Union.class);
-	  if(union != null) {
-		  return union.value();
-	  }
-	  
-	  if(element instanceof Class) {
-	      // automatic sealed class polymorphic
-	      try {
-	        if (IS_SEALED_METHOD != null && Boolean.TRUE.equals(IS_SEALED_METHOD.invoke(element))) {
-	          return (Class<?>[]) GET_PERMITTED_SUBCLASSES_METHOD.invoke(element);
-	        }
-	      } catch (ReflectiveOperationException e) {
-	        throw new AvroRuntimeException(e);
-	      }
-	  }
-	  
-	  return null;
+    Union union = element.getAnnotation(Union.class);
+    if (union != null) {
+      return union.value();
+    }
+
+    if (element instanceof Class) {
+      // automatic sealed class polymorphic
+      try {
+        if (IS_SEALED_METHOD != null && Boolean.TRUE.equals(IS_SEALED_METHOD.invoke(element))) {
+          return (Class<?>[]) GET_PERMITTED_SUBCLASSES_METHOD.invoke(element);
+        }
+      } catch (ReflectiveOperationException e) {
+        throw new AvroRuntimeException(e);
+      }
+    }
+
+    return null;
   }
 
   // construct a schema from a union annotation

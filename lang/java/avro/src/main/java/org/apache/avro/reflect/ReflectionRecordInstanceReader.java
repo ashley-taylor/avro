@@ -20,6 +20,8 @@ package org.apache.avro.reflect;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.util.List;
+
+import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.io.ResolvingDecoder;
 
 public class ReflectionRecordInstanceReader implements RecordInstanceReader {
@@ -42,8 +44,8 @@ public class ReflectionRecordInstanceReader implements RecordInstanceReader {
 
     try {
       return this.constructor.newInstance(args);
-    } catch (Throwable e) {
-      throw new RuntimeException(e);
+    } catch (ReflectiveOperationException e) {
+      throw new AvroRuntimeException(e);
     }
   }
 }

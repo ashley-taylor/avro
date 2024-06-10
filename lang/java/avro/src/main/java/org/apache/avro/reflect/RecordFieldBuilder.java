@@ -62,14 +62,11 @@ class RecordFieldBuilder {
 
     List<Class<?>> parameterTypes = new ArrayList<>(fields.length);
 
-    Map<String, Integer> offsets = new HashMap<>();
-
     // need to know offset for mapping
     for (Field field : fields) {
       if (Modifier.isStatic(field.getModifiers())) {
         continue;
       }
-      offsets.put(field.getName(), parameterTypes.size());
       parameterTypes.add(field.getType());
     }
 
@@ -92,8 +89,12 @@ class RecordFieldBuilder {
       parameterTypes.add(field.getType());
     }
 
-    return schema.getFields().stream().map(field -> {
-      int offset = offsets.get(field.name());
+    var fieldInfos = schema.getFields().stream().map(field -> {
+      Integer offset = offsets.remove(field.name());
+
+      if (offset == null) {
+        throw new AvroMissingFieldException("Field does not exist", field);
+      }
 
       try {
         Field classField = type.getDeclaredField(field.name());
@@ -104,6 +105,36 @@ class RecordFieldBuilder {
         throw new AvroRuntimeException("Could not instantiate custom Encoding");
       }
     }).collect(Collectors.toList());
+
+    // got a new field, set to default value
+    if (!offsets.isEmpty()) {
+      var defaultFieldInfos = new ArrayList<>(fieldInfos);
+
+      offsets.forEach((field, offset) -> {
+        try {
+          var classField = type.getDeclaredField(field);
+          var fieldType = classField.getType();
+
+          RecordInstanceReader reader;
+          if (fieldType.isPrimitive()) {
+            var defaultValue = Array.get(Array.newInstance(fieldType, 1), 0);
+            reader = new DefaultReader(defaultValue);
+          } else {
+            reader = new DefaultReader(null);
+          }
+
+          defaultFieldInfos.add(new FieldInfo(null, classField, reader, null, offset));
+
+        } catch (ReflectiveOperationException e) {
+          throw new AvroRuntimeException(e);
+        }
+      });
+
+      fieldInfos = defaultFieldInfos;
+
+    }
+
+    return fieldInfos;
   }
 
   private static RecordInstanceWriter buildWriter(Field classField, Schema.Field field) {
@@ -123,7 +154,7 @@ class RecordFieldBuilder {
       IOException {
     AvroEncode enc = classField.getAnnotation(AvroEncode.class);
     if (enc != null)
-      return new CustomEncodedFieldReader(enc.using().getDeclaredConstructor().newInstance());
+      return new CustomEncodedFieldReader(enc.using().getDeclaredConstructor().newInstance(), schema);
 
     var simple = SIMPLE_READER.get(new LookupKey(classField.getType(), schema.getType()));
 
@@ -144,7 +175,7 @@ class RecordFieldBuilder {
         Class<?> c = ClassUtils.forName(classField.getDeclaringClass().getClassLoader(),
             SpecificData.getClassName(schema));
         if (IS_RECORD_METHOD != null && IS_RECORD_METHOD.invoke(c).equals(true)) {
-          return new CustomEncodedFieldReader(new ReflectRecordEncoding(c, schema));
+          return new CustomEncodedFieldReader(new ReflectRecordEncoding(c, schema), schema);
         }
       } catch (ClassNotFoundException e) {
         // Avro will throw this same error later
@@ -192,7 +223,7 @@ class RecordFieldBuilder {
   private static class FastArrayReader implements RecordInstanceReader {
 
     private final RecordInstanceReader inner;
-    private Field classField;
+    private final Field classField;
 
     public FastArrayReader(Schema schema, Field classField) throws InstantiationException, IllegalAccessException,
         InvocationTargetException, NoSuchMethodException, IOException {
@@ -220,12 +251,27 @@ class RecordFieldBuilder {
     }
   }
 
+  private static class DefaultReader implements RecordInstanceReader {
+
+    private final Object defaultValue;
+
+    public DefaultReader(Object defaultValue) {
+      this.defaultValue = defaultValue;
+    }
+
+    @Override
+    public Object read(ResolvingDecoder in, ReflectDatumReader reader) throws IOException {
+      return defaultValue;
+    }
+  }
+
   private static class CustomEncodedFieldReader implements RecordInstanceReader {
 
     private final CustomEncoding<?> encoding;
 
-    public CustomEncodedFieldReader(CustomEncoding<?> encoding) {
+    public CustomEncodedFieldReader(CustomEncoding<?> encoding, Schema schema) {
       this.encoding = encoding;
+      encoding.setSchema(schema);
     }
 
     @Override
@@ -297,7 +343,6 @@ class RecordFieldBuilder {
     private final Field recordField;
     private final RecordInstanceReader reader;
     private final RecordInstanceWriter writer;
-    private final int schemaOffset;
     private final int constructorOffset;
 
     public FieldInfo(Schema.Field field, Field recordField, RecordInstanceReader reader, RecordInstanceWriter writer,
@@ -306,7 +351,6 @@ class RecordFieldBuilder {
       this.recordField = recordField;
       this.reader = reader;
       this.writer = writer;
-      this.schemaOffset = field.pos();
       this.constructorOffset = constructorOffset;
     }
 
@@ -328,10 +372,6 @@ class RecordFieldBuilder {
 
     public int getConstructorOffset() {
       return constructorOffset;
-    }
-
-    public int getSchemaOffset() {
-      return schemaOffset;
     }
 
     public RecordInstanceReader getReader() {
