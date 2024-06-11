@@ -36,31 +36,12 @@ import org.objectweb.asm.Opcodes;
 
 public class GenerateRecordInstanceWriter implements Opcodes {
 
-  private static class Caller {
-
-    private final String method;
-    private final String descriptor;
-
-    public Caller(String method, Class<?>... type) {
-      this.method = method;
-      try {
-        this.descriptor = getMethodDescriptor(Encoder.class.getMethod(method, type));
-      } catch (NoSuchMethodException | SecurityException e) {
-
-        throw new RuntimeException(e);
-      }
-    }
-
-    public String getMethod() {
-      return method;
-    }
-
-    public String getDescriptor() {
-      return descriptor;
-    }
-  }
-
   private static final Map<LookupKey, Caller> SIMPLE_WRITER = new HashMap<>();
+  private static final int THIS = 0;
+  private static final int LIST = 1;
+  private static final int DATUM = 1;
+  private static final int ENCODER = 2;
+  private static final int WRITER = 3;
 
   static {
     SIMPLE_WRITER.put(new LookupKey(int.class, Schema.Type.INT), new Caller("writeInt", int.class));
@@ -71,10 +52,10 @@ public class GenerateRecordInstanceWriter implements Opcodes {
     SIMPLE_WRITER.put(new LookupKey(String.class, Schema.Type.STRING), new Caller("writeString", String.class));
   }
 
-  public RecordInstanceWriter generate(List<FieldInfo> fields, Class<?> type) throws ReflectiveOperationException {
-    var packageName = "org.apache.avro.generated." + type.getPackageName();
-    final String fullClassName = packageName + "." + type.getSimpleName() + "Writer";
-    var bytes = dump(fullClassName, fields, type);
+  RecordInstanceWriter generate(List<FieldInfo> fields, Class<?> type) throws ReflectiveOperationException {
+    // store as a static class within the class to remove visibility issues
+    final String fullClassName = type.getName() + "$GeneratedAvroWriter";
+    var bytes = generateClass(fullClassName, fields, type);
 
     var loader = new ClassLoader(type.getClassLoader()) {
       @Override
@@ -88,17 +69,29 @@ public class GenerateRecordInstanceWriter implements Opcodes {
     return (RecordInstanceWriter) generatedConstructor.newInstance(fields);
   }
 
-  public static byte[] dump(String fullClassName, List<FieldInfo> fields, Class<?> type)
+  static byte[] generateClass(String fullClassName, List<FieldInfo> fields, Class<?> type)
       throws ReflectiveOperationException {
     ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 
     String className = fullClassName.replace('.', '/');
 
-    cw.visit(V17, ACC_PUBLIC + ACC_SUPER, className, null, getInternalName(Object.class),
+    cw.visit(V17, ACC_PUBLIC + ACC_SUPER + ACC_STATIC, className, null, getInternalName(Object.class),
         new String[] { getInternalName(RecordInstanceWriter.class) });
 
     cw.visitSource(null, null);
 
+    generateFields(fields, cw);
+
+    generateConstructor(fields, cw, className);
+
+    generateWriter(fields, type, cw, className);
+
+    cw.visitEnd();
+
+    return cw.toByteArray();
+  }
+
+  private static void generateFields(List<FieldInfo> fields, ClassWriter cw) {
     for (var field : fields) {
       var lookup = new LookupKey(field);
 
@@ -106,83 +99,78 @@ public class GenerateRecordInstanceWriter implements Opcodes {
         cw.visitField(ACC_PRIVATE + ACC_FINAL, field.getName(), getDescriptor(RecordInstanceWriter.class), null, null);
       }
     }
-
-    {
-      var mv = cw.visitMethod(ACC_PUBLIC, "<init>", "(Ljava/util/List;)V",
-          "(Ljava/util/List<Lorg/apache/avro/reflect/RecordInstanceWriter;>;)V", null);
-      mv.visitVarInsn(ALOAD, 0);
-      mv.visitMethodInsn(INVOKESPECIAL, getInternalName(Object.class), "<init>", "()V", false);
-
-      for (int i = 0; i < fields.size(); i++) {
-        var field = fields.get(i);
-        var lookup = new LookupKey(field);
-
-        if (SIMPLE_WRITER.containsKey(lookup)) {
-          continue;
-        }
-        mv.visitVarInsn(ALOAD, 0);
-        mv.visitVarInsn(ALOAD, 1);
-        mv.visitIntInsn(SIPUSH, i);
-        mv.visitMethodInsn(INVOKEINTERFACE, getInternalName(List.class), "get",
-            getMethodDescriptor(List.class.getMethod("get", int.class)), true);
-        mv.visitTypeInsn(CHECKCAST, getInternalName(RecordFieldBuilder.FieldInfo.class));
-        mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(RecordFieldBuilder.FieldInfo.class), "getWriter",
-            getMethodDescriptor(RecordFieldBuilder.FieldInfo.class.getMethod("getWriter")), false);
-        mv.visitFieldInsn(PUTFIELD, className, field.getName(), getDescriptor(RecordInstanceWriter.class));
-      }
-      mv.visitInsn(RETURN);
-      mv.visitMaxs(0, 0);
-      mv.visitEnd();
-    }
-
-    {
-      var description = getMethodDescriptor(
-          RecordInstanceWriter.class.getMethod("write", Object.class, Encoder.class, ReflectDatumWriter.class));
-      var mv = cw.visitMethod(ACC_PUBLIC, "write", description, null,
-          new String[] { getInternalName(IOException.class) });
-      mv.visitCode();
-
-      for (var field : fields) {
-        var method = type.getMethod(field.getName());
-        var lookup = new LookupKey(field);
-
-        var caller = SIMPLE_WRITER.get(lookup);
-        if (caller != null) {
-          mv.visitVarInsn(ALOAD, 2);
-          mv.visitVarInsn(ALOAD, 1);
-          mv.visitTypeInsn(CHECKCAST, getInternalName(type));
-          mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(type), method.getName(), getMethodDescriptor(method),
-              false);
-          mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(Encoder.class), caller.getMethod(), caller.getDescriptor(),
-              false);
-        } else {
-          mv.visitVarInsn(ALOAD, 0);
-          mv.visitFieldInsn(GETFIELD, className, field.getName(), getDescriptor(RecordInstanceWriter.class));
-          mv.visitVarInsn(ALOAD, 1);
-          mv.visitTypeInsn(CHECKCAST, getInternalName(type));
-          mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(type), method.getName(), getMethodDescriptor(method),
-              false);
-
-          if (field.getType().isPrimitive()) {
-            castPrimitive(field, mv);
-          }
-
-          mv.visitVarInsn(ALOAD, 2);
-          mv.visitVarInsn(ALOAD, 3);
-          mv.visitMethodInsn(INVOKEINTERFACE, getInternalName(RecordInstanceWriter.class), "write", description, true);
-        }
-      }
-      mv.visitInsn(RETURN);
-      mv.visitMaxs(0, 0);
-      mv.visitEnd();
-    }
-
-    cw.visitEnd();
-
-    return cw.toByteArray();
   }
 
-  protected static void castPrimitive(FieldInfo field, MethodVisitor mv) throws NoSuchMethodException {
+  private static void generateConstructor(List<FieldInfo> fields, ClassWriter cw, String className)
+      throws NoSuchMethodException {
+    var mv = cw.visitMethod(ACC_PUBLIC, "<init>", "(Ljava/util/List;)V",
+        "(Ljava/util/List<Lorg/apache/avro/reflect/RecordInstanceWriter;>;)V", null);
+    mv.visitVarInsn(ALOAD, THIS);
+    mv.visitMethodInsn(INVOKESPECIAL, getInternalName(Object.class), "<init>", "()V", false);
+
+    for (int i = 0; i < fields.size(); i++) {
+      var field = fields.get(i);
+      var lookup = new LookupKey(field);
+
+      if (SIMPLE_WRITER.containsKey(lookup)) {
+        continue;
+      }
+      mv.visitVarInsn(ALOAD, THIS);
+      mv.visitVarInsn(ALOAD, LIST);
+      mv.visitIntInsn(SIPUSH, i);
+      mv.visitMethodInsn(INVOKEINTERFACE, getInternalName(List.class), "get",
+          getMethodDescriptor(List.class.getMethod("get", int.class)), true);
+      mv.visitTypeInsn(CHECKCAST, getInternalName(FieldInfo.class));
+      mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(FieldInfo.class), "getWriter",
+          getMethodDescriptor(FieldInfo.class.getMethod("getWriter")), false);
+      mv.visitFieldInsn(PUTFIELD, className, field.getName(), getDescriptor(RecordInstanceWriter.class));
+    }
+    mv.visitInsn(RETURN);
+    mv.visitMaxs(0, 0);
+    mv.visitEnd();
+  }
+
+  private static void generateWriter(List<FieldInfo> fields, Class<?> type, ClassWriter cw, String className)
+      throws NoSuchMethodException {
+    var description = getMethodDescriptor(
+        RecordInstanceWriter.class.getMethod("write", Object.class, Encoder.class, ReflectDatumWriter.class));
+    var mv = cw.visitMethod(ACC_PUBLIC, "write", description, null,
+        new String[] { getInternalName(IOException.class) });
+    mv.visitCode();
+
+    for (var field : fields) {
+      var method = type.getMethod(field.getName());
+      var lookup = new LookupKey(field);
+      var caller = SIMPLE_WRITER.get(lookup);
+      if (caller != null) {
+        mv.visitVarInsn(ALOAD, ENCODER);
+        mv.visitVarInsn(ALOAD, DATUM);
+        mv.visitTypeInsn(CHECKCAST, getInternalName(type));
+        mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(type), method.getName(), getMethodDescriptor(method), false);
+        mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(Encoder.class), caller.getMethod(), caller.getDescriptor(),
+            false);
+      } else {
+        mv.visitVarInsn(ALOAD, THIS);
+        mv.visitFieldInsn(GETFIELD, className, field.getName(), getDescriptor(RecordInstanceWriter.class));
+        mv.visitVarInsn(ALOAD, DATUM);
+        mv.visitTypeInsn(CHECKCAST, getInternalName(type));
+        mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(type), method.getName(), getMethodDescriptor(method), false);
+
+        if (field.getType().isPrimitive()) {
+          castPrimitive(field, mv);
+        }
+
+        mv.visitVarInsn(ALOAD, ENCODER);
+        mv.visitVarInsn(ALOAD, WRITER);
+        mv.visitMethodInsn(INVOKEINTERFACE, getInternalName(RecordInstanceWriter.class), "write", description, true);
+      }
+    }
+    mv.visitInsn(RETURN);
+    mv.visitMaxs(0, 0);
+    mv.visitEnd();
+  }
+
+  private static void castPrimitive(FieldInfo field, MethodVisitor mv) throws NoSuchMethodException {
     var fType = field.getType();
     if (fType.equals(double.class)) {
       addPrimitiveCast(mv, Double.class, double.class);
@@ -214,5 +202,29 @@ public class GenerateRecordInstanceWriter implements Opcodes {
       throws NoSuchMethodException {
     mv.visitMethodInsn(INVOKESTATIC, getInternalName(type), "valueOf",
         getMethodDescriptor(type.getMethod("valueOf", primitiveType)), false);
+  }
+
+  private static class Caller {
+
+    private final String method;
+    private final String descriptor;
+
+    public Caller(String method, Class<?>... type) {
+      this.method = method;
+      try {
+        this.descriptor = getMethodDescriptor(Encoder.class.getMethod(method, type));
+      } catch (NoSuchMethodException | SecurityException e) {
+
+        throw new RuntimeException(e);
+      }
+    }
+
+    public String getMethod() {
+      return method;
+    }
+
+    public String getDescriptor() {
+      return descriptor;
+    }
   }
 }

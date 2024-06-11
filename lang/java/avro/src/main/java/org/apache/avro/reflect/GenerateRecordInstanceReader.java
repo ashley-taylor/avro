@@ -38,65 +38,13 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
-public class GenerateRecordInstanceReader implements Opcodes {
-
-  private static class Caller {
-
-    private final String method;
-
-    private final PrimitiveInfo info;
-
-    public Caller(String method, PrimitiveInfo info) {
-      super();
-      this.method = method;
-      this.info = info;
-
-    }
-
-    public String getMethod() {
-      return method;
-    }
-
-    public int getSave() {
-      return info.save;
-    }
-
-    public int getLoad() {
-      return info.load;
-    }
-
-    public int getWidth() {
-      return info.width;
-    }
-  }
-
-  private static class PrimitiveInfo {
-
-    private final int save;
-    private final int load;
-    private final int width;
-
-    public PrimitiveInfo(int save, int load, int width) {
-      super();
-      this.save = save;
-      this.load = load;
-      this.width = width;
-    }
-
-    public int getSave() {
-      return save;
-    }
-
-    public int getLoad() {
-      return load;
-    }
-
-    public int getWidth() {
-      return width;
-    }
-  }
+class GenerateRecordInstanceReader implements Opcodes {
 
   private static final Map<Class<?>, PrimitiveInfo> PRIMITIVES = new HashMap<>();
+  private static final int THIS = 0;
+  private static final int LIST = 1;
+  private static final int DECODER = 1;
+  private static final int READER = 2;
 
   static {
     PRIMITIVES.put(int.class, new PrimitiveInfo(ISTORE, ILOAD, 1));
@@ -121,13 +69,13 @@ public class GenerateRecordInstanceReader implements Opcodes {
     SIMPLE_READER.put(new LookupKey(String.class, Schema.Type.STRING), "readString");
   }
 
-  public RecordInstanceReader generate(List<RecordFieldBuilder.FieldInfo> fields, Constructor<?> constructor)
+  RecordInstanceReader generate(List<FieldInfo> fields, Constructor<?> constructor)
       throws ReflectiveOperationException {
     var type = constructor.getDeclaringClass();
-    var packageName = "avro.generated." + type.getPackageName();
-    final String fullClassName = packageName + "." + type.getSimpleName() + "Reader";
+    // store as a static class within the class to remove visibility issues
+    final String fullClassName = type.getName() + "$GeneratedAvroReader";
 
-    var bytes = dump(fullClassName, fields, constructor);
+    var bytes = generateClass(fullClassName, fields, constructor);
 
     var loader = new ClassLoader(constructor.getDeclaringClass().getClassLoader()) {
       @Override
@@ -141,17 +89,29 @@ public class GenerateRecordInstanceReader implements Opcodes {
     return (RecordInstanceReader) generatedConstructor.newInstance(fields);
   }
 
-  public static byte[] dump(String fullClassName, List<FieldInfo> fields, Constructor<?> constructor)
+  static byte[] generateClass(String fullClassName, List<FieldInfo> fields, Constructor<?> constructor)
       throws ReflectiveOperationException {
     ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 
     String className = fullClassName.replace('.', '/');
 
-    cw.visit(V17, ACC_PUBLIC + ACC_SUPER, className, null, getInternalName(Object.class),
+    cw.visit(V17, ACC_PUBLIC + ACC_SUPER + ACC_STATIC, className, null, getInternalName(Object.class),
         new String[] { getInternalName(RecordInstanceReader.class) });
 
     cw.visitSource(null, null);
 
+    generateFields(fields, cw);
+
+    generateConstructor(fields, cw, className);
+
+    generateReader(fields, constructor, cw, className);
+
+    cw.visitEnd();
+
+    return cw.toByteArray();
+  }
+
+  private static void generateFields(List<FieldInfo> fields, ClassWriter cw) {
     for (var field : fields) {
       var lookup = new LookupKey(field);
 
@@ -159,78 +119,13 @@ public class GenerateRecordInstanceReader implements Opcodes {
         cw.visitField(ACC_PRIVATE + ACC_FINAL, field.getName(), getDescriptor(RecordInstanceReader.class), null, null);
       }
     }
-
-    generateConstructor(fields, cw, className);
-
-    {
-      var description = getMethodDescriptor(
-          RecordInstanceReader.class.getMethod("read", ResolvingDecoder.class, ReflectDatumReader.class));
-      var mv = cw.visitMethod(ACC_PUBLIC, "read", description, null,
-          new String[] { getInternalName(IOException.class) });
-      mv.visitCode();
-
-      int index = 3;
-      Map<FieldInfo, Integer> offsets = new HashMap<>();
-      for (var field : fields) {
-        var lookup = new LookupKey(field);
-
-        offsets.put(field, index);
-        var caller = SIMPLE_READER.get(lookup);
-        if (caller != null) {
-          mv.visitVarInsn(ALOAD, 1);
-          mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(ResolvingDecoder.class), caller,
-              getMethodDescriptor(ResolvingDecoder.class.getMethod(caller)), false);
-        } else {
-          mv.visitVarInsn(ALOAD, 0);
-          mv.visitFieldInsn(GETFIELD, className, field.getName(), getDescriptor(RecordInstanceReader.class));
-          mv.visitVarInsn(ALOAD, 1);
-          mv.visitVarInsn(ALOAD, 2);
-          mv.visitMethodInsn(INVOKEINTERFACE, getInternalName(RecordInstanceReader.class), "read", description, true);
-          if (field.getType().isPrimitive()) {
-            castPrimitive(field, mv);
-          }
-        }
-        if (field.getType().isPrimitive()) {
-          mv.visitVarInsn(PRIMITIVES.get(field.getType()).getSave(), index);
-          index += 2;
-        } else {
-          mv.visitTypeInsn(CHECKCAST, getInternalName(field.getType()));
-          mv.visitVarInsn(ASTORE, index++);
-        }
-      }
-
-      mv.visitTypeInsn(NEW, getInternalName(constructor.getDeclaringClass()));
-      mv.visitInsn(DUP);
-
-      fields.stream().sorted(Comparator.comparing(FieldInfo::getConstructorOffset)).forEach(field -> {
-
-        if (field.getType().isPrimitive()) {
-
-          mv.visitVarInsn(PRIMITIVES.get(field.getType()).getLoad(), offsets.get(field));
-        } else {
-          mv.visitVarInsn(ALOAD, offsets.get(field));
-
-        }
-
-      });
-
-      mv.visitMethodInsn(INVOKESPECIAL, getInternalName(constructor.getDeclaringClass()), "<init>",
-          getConstructorDescriptor(constructor), false);
-      mv.visitInsn(ARETURN);
-      mv.visitMaxs(0, 0);
-      mv.visitEnd();
-    }
-
-    cw.visitEnd();
-
-    return cw.toByteArray();
   }
 
   private static void generateConstructor(List<FieldInfo> fields, ClassWriter cw, String className)
       throws NoSuchMethodException {
     var mv = cw.visitMethod(ACC_PUBLIC, "<init>", "(Ljava/util/List;)V",
         "(Ljava/util/List<Lorg/apache/avro/reflect/RecordInstanceReader;>;)V", null);
-    mv.visitVarInsn(ALOAD, 0);
+    mv.visitVarInsn(ALOAD, THIS);
     mv.visitMethodInsn(INVOKESPECIAL, getInternalName(Object.class), "<init>", "()V", false);
 
     for (int i = 0; i < fields.size(); i++) {
@@ -240,8 +135,8 @@ public class GenerateRecordInstanceReader implements Opcodes {
       if (SIMPLE_READER.containsKey(lookup)) {
         continue;
       }
-      mv.visitVarInsn(ALOAD, 0);
-      mv.visitVarInsn(ALOAD, 1);
+      mv.visitVarInsn(ALOAD, THIS);
+      mv.visitVarInsn(ALOAD, LIST);
       mv.visitIntInsn(SIPUSH, i);
       mv.visitMethodInsn(INVOKEINTERFACE, getInternalName(List.class), "get",
           getMethodDescriptor(List.class.getMethod("get", int.class)), true);
@@ -251,6 +146,64 @@ public class GenerateRecordInstanceReader implements Opcodes {
       mv.visitFieldInsn(PUTFIELD, className, field.getName(), getDescriptor(RecordInstanceReader.class));
     }
     mv.visitInsn(RETURN);
+    mv.visitMaxs(0, 0);
+    mv.visitEnd();
+  }
+
+  private static void generateReader(List<FieldInfo> fields, Constructor<?> constructor, ClassWriter cw,
+      String className) throws NoSuchMethodException {
+    var description = getMethodDescriptor(
+        RecordInstanceReader.class.getMethod("read", ResolvingDecoder.class, ReflectDatumReader.class));
+    var mv = cw.visitMethod(ACC_PUBLIC, "read", description, null, new String[] { getInternalName(IOException.class) });
+    mv.visitCode();
+
+    int index = 3;
+    Map<FieldInfo, Integer> offsets = new HashMap<>();
+
+    // call field readers and assign to local variables
+    for (var field : fields) {
+      var lookup = new LookupKey(field);
+
+      offsets.put(field, index);
+      var caller = SIMPLE_READER.get(lookup);
+      if (caller != null) {
+        mv.visitVarInsn(ALOAD, DECODER);
+        mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(ResolvingDecoder.class), caller,
+            getMethodDescriptor(ResolvingDecoder.class.getMethod(caller)), false);
+      } else {
+        mv.visitVarInsn(ALOAD, THIS);
+        mv.visitFieldInsn(GETFIELD, className, field.getName(), getDescriptor(RecordInstanceReader.class));
+        mv.visitVarInsn(ALOAD, DECODER);
+        mv.visitVarInsn(ALOAD, READER);
+        mv.visitMethodInsn(INVOKEINTERFACE, getInternalName(RecordInstanceReader.class), "read", description, true);
+        if (field.getType().isPrimitive()) {
+          castPrimitive(field, mv);
+        }
+      }
+      if (field.getType().isPrimitive()) {
+        var primitive = PRIMITIVES.get(field.getType());
+        mv.visitVarInsn(primitive.getSave(), index);
+        index += primitive.getWidth();
+      } else {
+        mv.visitTypeInsn(CHECKCAST, getInternalName(field.getType()));
+        mv.visitVarInsn(ASTORE, index++);
+      }
+    }
+
+    // create record and load in local variables
+    mv.visitTypeInsn(NEW, getInternalName(constructor.getDeclaringClass()));
+    mv.visitInsn(DUP);
+
+    fields.stream().sorted(Comparator.comparing(FieldInfo::getConstructorOffset)).forEach(field -> {
+      if (field.getType().isPrimitive()) {
+        mv.visitVarInsn(PRIMITIVES.get(field.getType()).getLoad(), offsets.get(field));
+      } else {
+        mv.visitVarInsn(ALOAD, offsets.get(field));
+      }
+    });
+    mv.visitMethodInsn(INVOKESPECIAL, getInternalName(constructor.getDeclaringClass()), "<init>",
+        getConstructorDescriptor(constructor), false);
+    mv.visitInsn(ARETURN);
     mv.visitMaxs(0, 0);
     mv.visitEnd();
   }
@@ -351,5 +304,30 @@ public class GenerateRecordInstanceReader implements Opcodes {
     var name = primitiveType + "Value";
     mv.visitTypeInsn(CHECKCAST, getInternalName(type));
     mv.visitMethodInsn(INVOKEVIRTUAL, getInternalName(type), name, getMethodDescriptor(type.getMethod(name)), false);
+  }
+
+  private static class PrimitiveInfo {
+
+    private final int save;
+    private final int load;
+    private final int width;
+
+    public PrimitiveInfo(int save, int load, int width) {
+      this.save = save;
+      this.load = load;
+      this.width = width;
+    }
+
+    public int getSave() {
+      return save;
+    }
+
+    public int getLoad() {
+      return load;
+    }
+
+    public int getWidth() {
+      return width;
+    }
   }
 }
