@@ -28,7 +28,7 @@ public class ReflectionRecordInstanceWriter implements RecordInstanceWriter {
 
   private final List<FieldInfo> fields;
 
-  public ReflectionRecordInstanceWriter(List<FieldInfo> fields) {
+  ReflectionRecordInstanceWriter(List<FieldInfo> fields) {
     this.fields = fields;
   }
 

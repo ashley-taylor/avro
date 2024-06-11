@@ -29,7 +29,7 @@ public class ReflectionRecordInstanceReader implements RecordInstanceReader {
   private final List<RecordFieldBuilder.FieldInfo> reader;
   private final Constructor<?> constructor;
 
-  public ReflectionRecordInstanceReader(List<RecordFieldBuilder.FieldInfo> fields, Constructor<?> constructor) {
+  ReflectionRecordInstanceReader(List<RecordFieldBuilder.FieldInfo> fields, Constructor<?> constructor) {
     this.reader = fields;
     this.constructor = constructor;
   }
