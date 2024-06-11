@@ -51,7 +51,6 @@ public class ReflectRecordEncoding extends CustomEncoding<Object> {
         this.writer = new GenerateRecordInstanceWriter().generate(fields, type);
         this.reader = new GenerateRecordInstanceReader().generate(fields,
             RecordFieldBuilder.getRecordConstructor(type));
-
       } else {
         this.writer = new ReflectionRecordInstanceWriter(fields);
         this.reader = new ReflectionRecordInstanceReader(fields, RecordFieldBuilder.getRecordConstructor(type));
