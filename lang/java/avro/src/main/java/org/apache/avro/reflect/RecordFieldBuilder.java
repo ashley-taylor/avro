@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -150,8 +149,7 @@ class RecordFieldBuilder {
   }
 
   private static RecordInstanceReader buildReader(org.apache.avro.Schema schema, Field classField)
-      throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException,
-      IOException {
+      throws ReflectiveOperationException, IOException {
     AvroEncode enc = classField.getAnnotation(AvroEncode.class);
     if (enc != null)
       return new CustomEncodedFieldReader(enc.using().getDeclaredConstructor().newInstance(), schema);
@@ -163,11 +161,16 @@ class RecordFieldBuilder {
     }
 
     if (schema.getType() == Schema.Type.UNION) {
-      return new FastUnionReader(schema, classField);
+      return new UnionReader(schema, classField);
     }
 
     if (schema.getType() == Schema.Type.ARRAY && classField.getType().isArray()) {
-      return new FastArrayReader(schema, classField);
+      if (classField.getType().getComponentType().isPrimitive()) {
+        return new PrimitiveArrayReader(classField);
+      } else {
+        return new ArrayReader(schema, classField);
+
+      }
     }
 
     if (schema.getType() == Schema.Type.RECORD) {
@@ -199,12 +202,11 @@ class RecordFieldBuilder {
     }
   }
 
-  private static class FastUnionReader implements RecordInstanceReader {
+  private static class UnionReader implements RecordInstanceReader {
 
     private final RecordInstanceReader[] unions;
 
-    public FastUnionReader(Schema schema, Field classField) throws InstantiationException, IllegalAccessException,
-        InvocationTargetException, NoSuchMethodException, IOException {
+    public UnionReader(Schema schema, Field classField) throws ReflectiveOperationException, IOException {
       var types = schema.getTypes();
 
       this.unions = new RecordInstanceReader[types.size()];
@@ -220,13 +222,29 @@ class RecordFieldBuilder {
     }
   }
 
-  private static class FastArrayReader implements RecordInstanceReader {
+  private static class PrimitiveArrayReader implements RecordInstanceReader {
+
+    private final Class<?> type;
+
+    public PrimitiveArrayReader(Field classField) {
+      this.type = classField.getType().getComponentType();
+    }
+
+    @Override
+    public Object read(ResolvingDecoder in, ReflectDatumReader<?> reader) throws IOException {
+      long l = in.readArrayStart();
+      var array = Array.newInstance(type, (int) l);
+      ArrayAccessor.readArray(array, type, l, in);
+      return array;
+    }
+  }
+
+  private static class ArrayReader implements RecordInstanceReader {
 
     private final RecordInstanceReader inner;
     private final Field classField;
 
-    public FastArrayReader(Schema schema, Field classField) throws InstantiationException, IllegalAccessException,
-        InvocationTargetException, NoSuchMethodException, IOException {
+    public ArrayReader(Schema schema, Field classField) throws ReflectiveOperationException, IOException {
       this.classField = classField;
       var type = schema.getElementType();
       this.inner = buildReader(type, classField);
@@ -308,7 +326,7 @@ class RecordFieldBuilder {
     }
   }
 
-  private static class LookupKey {
+  protected static class LookupKey {
 
     private final Class<?> klass;
     private final Schema.Type type;
@@ -317,6 +335,16 @@ class RecordFieldBuilder {
       super();
       this.klass = klass;
       this.type = type;
+    }
+
+    public LookupKey(FieldInfo info) {
+      super();
+      this.klass = info.getType();
+      if (info.getSchema() == null) {
+        this.type = null;
+      } else {
+        this.type = info.getSchema().getType();
+      }
     }
 
     @Override
@@ -359,7 +387,23 @@ class RecordFieldBuilder {
     }
 
     public Schema getSchema() {
+      if (field == null) {
+        return null;
+      }
       return field.schema();
+    }
+
+    public Schema.Type getSchemaType() {
+      var schema = getSchema();
+      if (schema == null) {
+        return null;
+      }
+      return schema.getType();
+
+    }
+
+    public String getName() {
+      return recordField.getName();
     }
 
     public Field getRecordField() {
