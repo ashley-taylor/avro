@@ -22,29 +22,23 @@ import org.apache.avro.Schema;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.io.Encoder;
-import org.apache.avro.perf.test.BasicJavaRecord;
+import org.apache.avro.perf.test.NestedJavaRecord;
 import org.apache.avro.perf.test.BasicState;
 import org.apache.avro.reflect.ReflectData;
 import org.apache.avro.reflect.ReflectDatumReader;
 import org.apache.avro.reflect.ReflectDatumWriter;
-
-import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.Level;
-import org.openjdk.jmh.annotations.OperationsPerInvocation;
-import org.openjdk.jmh.annotations.Scope;
-import org.openjdk.jmh.annotations.Setup;
-import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
-public class ReflectJavaRecordTest {
+public class NestedJavaRecordTest {
 
   @Benchmark
   @OperationsPerInvocation(BasicState.BATCH_SIZE)
   public void encode(final TestStateEncode state) throws Exception {
-    for (final BasicJavaRecord r : state.testData) {
+    for (final NestedJavaRecord r : state.testData) {
       state.datumWriter.write(r, state.encoder);
     }
   }
@@ -53,7 +47,7 @@ public class ReflectJavaRecordTest {
   @OperationsPerInvocation(BasicState.BATCH_SIZE)
   public void decode(final Blackhole blackhole, final TestStateDecode state) throws Exception {
     final Decoder d = state.decoder;
-    final ReflectDatumReader<BasicJavaRecord> datumReader = new ReflectDatumReader<>(state.schema);
+    final ReflectDatumReader<NestedJavaRecord> datumReader = new ReflectDatumReader<>(state.schema);
     for (int i = 0; i < state.getBatchSize(); i++) {
       blackhole.consume(datumReader.read(null, d));
     }
@@ -64,13 +58,13 @@ public class ReflectJavaRecordTest {
 
     private final Schema schema;
 
-    private BasicJavaRecord[] testData;
+    private NestedJavaRecord[] testData;
     private Encoder encoder;
-    private ReflectDatumWriter<BasicJavaRecord> datumWriter;
+    private ReflectDatumWriter<NestedJavaRecord> datumWriter;
 
     public TestStateEncode() {
       super();
-      final String jsonText = ReflectData.get().getSchema(BasicJavaRecord.class).toString();
+      final String jsonText = ReflectData.get().getSchema(NestedJavaRecord.class).toString();
       this.schema = new Schema.Parser().parse(jsonText);
     }
 
@@ -83,10 +77,10 @@ public class ReflectJavaRecordTest {
     public void doSetupTrial() throws Exception {
       this.encoder = super.newEncoder(false, getNullOutputStream());
       this.datumWriter = new ReflectDatumWriter<>(schema);
-      this.testData = new BasicJavaRecord[getBatchSize()];
+      this.testData = new NestedJavaRecord[getBatchSize()];
 
       for (int i = 0; i < testData.length; i++) {
-        this.testData[i] = new BasicJavaRecord(getRandom());
+        this.testData[i] = new NestedJavaRecord(getRandom());
       }
     }
   }
@@ -101,7 +95,7 @@ public class ReflectJavaRecordTest {
 
     public TestStateDecode() {
       super();
-      final String jsonText = ReflectData.get().getSchema(BasicJavaRecord.class).toString();
+      final String jsonText = ReflectData.get().getSchema(NestedJavaRecord.class).toString();
       this.schema = new Schema.Parser().parse(jsonText);
     }
 
@@ -114,10 +108,10 @@ public class ReflectJavaRecordTest {
     public void doSetupTrial() throws IOException {
       ByteArrayOutputStream baos = new ByteArrayOutputStream();
       Encoder encoder = super.newEncoder(true, baos);
-      ReflectDatumWriter<BasicJavaRecord> writer = new ReflectDatumWriter<>(schema);
+      ReflectDatumWriter<NestedJavaRecord> writer = new ReflectDatumWriter<>(schema);
 
       for (int i = 0; i < getBatchSize(); i++) {
-        final BasicJavaRecord r = new BasicJavaRecord(getRandom());
+        final NestedJavaRecord r = new NestedJavaRecord(getRandom());
         writer.write(r, encoder);
       }
 
