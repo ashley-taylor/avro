@@ -138,10 +138,28 @@ class RecordFieldBuilder {
 
   private static RecordInstanceWriter buildWriter(Field classField, Schema.Field field) {
     try {
+      var schema = field.schema();
       classField.setAccessible(true);
       AvroEncode enc = classField.getAnnotation(AvroEncode.class);
       if (enc != null)
         return new CustomEncodedFieldWriter(enc.using().getDeclaredConstructor().newInstance());
+
+      if (schema.getType() == Type.NULL) {
+        return new NullWriter();
+      }
+
+      if (schema.getType() == Type.RECORD) {
+        try {
+          Class<?> c = ClassUtils.forName(classField.getDeclaringClass().getClassLoader(),
+              SpecificData.getClassName(schema));
+          if (IS_RECORD_METHOD != null && IS_RECORD_METHOD.invoke(c).equals(true)) {
+            return new CustomEncodedFieldWriter(new ReflectRecordEncoding(c, schema));
+          }
+        } catch (ClassNotFoundException e) {
+          // Avro will throw this same error later
+        }
+      }
+
       return new ReflectFieldWriter(field.schema());
     } catch (ReflectiveOperationException e) {
       throw new AvroMissingFieldException("Field does not exist", field);
@@ -160,11 +178,15 @@ class RecordFieldBuilder {
       return simple;
     }
 
-    if (schema.getType() == Schema.Type.UNION) {
+    if (schema.getType() == Type.NULL) {
+      return new NullReader();
+    }
+
+    if (schema.getType() == Type.UNION) {
       return new UnionReader(schema, classField);
     }
 
-    if (schema.getType() == Schema.Type.ARRAY && classField.getType().isArray()) {
+    if (schema.getType() == Type.ARRAY && classField.getType().isArray()) {
       if (classField.getType().getComponentType().isPrimitive()) {
         return new PrimitiveArrayReader(classField);
       } else {
@@ -173,7 +195,7 @@ class RecordFieldBuilder {
       }
     }
 
-    if (schema.getType() == Schema.Type.RECORD) {
+    if (schema.getType() == Type.RECORD) {
       try {
         Class<?> c = ClassUtils.forName(classField.getDeclaringClass().getClassLoader(),
             SpecificData.getClassName(schema));
@@ -219,6 +241,15 @@ class RecordFieldBuilder {
     @Override
     public Object read(ResolvingDecoder in, ReflectDatumReader<?> reader) throws IOException {
       return unions[in.readIndex()].read(in, reader);
+    }
+  }
+
+  private static class NullReader implements RecordInstanceReader {
+
+    @Override
+    public Object read(ResolvingDecoder in, ReflectDatumReader<?> reader) throws IOException {
+      in.readNull();
+      return null;
     }
   }
 
@@ -312,6 +343,14 @@ class RecordFieldBuilder {
     }
   }
 
+  private static class NullWriter implements RecordInstanceWriter {
+
+    @Override
+    public void write(Object datum, Encoder out, ReflectDatumWriter<?> writer) throws IOException {
+      out.writeNull();
+    }
+  }
+
   private static class CustomEncodedFieldWriter implements RecordInstanceWriter {
 
     private final CustomEncoding<?> encoding;
@@ -329,7 +368,7 @@ class RecordFieldBuilder {
   protected static class LookupKey {
 
     private final Class<?> klass;
-    private final Schema.Type type;
+    private final Type type;
 
     public LookupKey(Class<?> klass, Type type) {
       super();
@@ -393,7 +432,7 @@ class RecordFieldBuilder {
       return field.schema();
     }
 
-    public Schema.Type getSchemaType() {
+    public Type getSchemaType() {
       var schema = getSchema();
       if (schema == null) {
         return null;
