@@ -60,21 +60,15 @@ public class GenerateRecordInstanceWriter implements Opcodes {
     }
   }
 
-  private static final Map<LookupKey, Caller> SIMPLE_READER = new HashMap<>();
+  private static final Map<LookupKey, Caller> SIMPLE_WRITER = new HashMap<>();
 
   static {
-    // SIMPLE_READER.put(new LookupKey(int.class, Schema.Type.INT), new
-    // Caller("writeInt", int.class));
-    // SIMPLE_READER.put(new LookupKey(float.class, Schema.Type.FLOAT), new
-    // Caller("writeFloat", float.class));
-    // SIMPLE_READER.put(new LookupKey(boolean.class, Schema.Type.BOOLEAN), new
-    // Caller("writeBoolean", boolean.class));
-    // SIMPLE_READER.put(new LookupKey(double.class, Schema.Type.DOUBLE), new
-    // Caller("writeDouble", double.class));
-    // SIMPLE_READER.put(new LookupKey(long.class, Schema.Type.LONG), new
-    // Caller("writeLong", long.class));
-    // SIMPLE_READER.put(new LookupKey(String.class, Schema.Type.STRING), new
-    // Caller("writeString", String.class));
+    SIMPLE_WRITER.put(new LookupKey(int.class, Schema.Type.INT), new Caller("writeInt", int.class));
+    SIMPLE_WRITER.put(new LookupKey(float.class, Schema.Type.FLOAT), new Caller("writeFloat", float.class));
+    SIMPLE_WRITER.put(new LookupKey(boolean.class, Schema.Type.BOOLEAN), new Caller("writeBoolean", boolean.class));
+    SIMPLE_WRITER.put(new LookupKey(double.class, Schema.Type.DOUBLE), new Caller("writeDouble", double.class));
+    SIMPLE_WRITER.put(new LookupKey(long.class, Schema.Type.LONG), new Caller("writeLong", long.class));
+    SIMPLE_WRITER.put(new LookupKey(String.class, Schema.Type.STRING), new Caller("writeString", String.class));
   }
 
   public RecordInstanceWriter generate(List<FieldInfo> fields, Class<?> type) throws ReflectiveOperationException {
@@ -108,7 +102,7 @@ public class GenerateRecordInstanceWriter implements Opcodes {
     for (var field : fields) {
       var lookup = new LookupKey(field);
 
-      if (!SIMPLE_READER.containsKey(lookup)) {
+      if (!SIMPLE_WRITER.containsKey(lookup)) {
         cw.visitField(ACC_PRIVATE + ACC_FINAL, field.getName(), getDescriptor(RecordInstanceWriter.class), null, null);
       }
     }
@@ -123,7 +117,7 @@ public class GenerateRecordInstanceWriter implements Opcodes {
         var field = fields.get(i);
         var lookup = new LookupKey(field);
 
-        if (SIMPLE_READER.containsKey(lookup)) {
+        if (SIMPLE_WRITER.containsKey(lookup)) {
           continue;
         }
         mv.visitVarInsn(ALOAD, 0);
@@ -152,7 +146,7 @@ public class GenerateRecordInstanceWriter implements Opcodes {
         var method = type.getMethod(field.getName());
         var lookup = new LookupKey(field);
 
-        var caller = SIMPLE_READER.get(lookup);
+        var caller = SIMPLE_WRITER.get(lookup);
         if (caller != null) {
           mv.visitVarInsn(ALOAD, 2);
           mv.visitVarInsn(ALOAD, 1);
