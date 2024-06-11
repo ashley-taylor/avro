@@ -12,19 +12,30 @@ import java.io.UncheckedIOException;
 
 public class RecordReadWriteUtil {
 
-  static <T> T read(byte[] toDecode) throws IOException {
-    DatumReader<T> datumReader = new ReflectDatumReader<>();
+  static <T> T read(boolean genTypes, byte[] toDecode) throws IOException {
+    System.setProperty(ReflectRecordEncoding.GENERATE_BINDING, Boolean.toString(genTypes));
+    var reflectData = new ReflectData();
+    DatumReader<T> datumReader = new ReflectDatumReader<>(reflectData);
     try (DataFileStream<T> dataFileReader = new DataFileStream<>(new ByteArrayInputStream(toDecode, 0, toDecode.length),
         datumReader);) {
       dataFileReader.hasNext();
       return dataFileReader.next();
+    } finally {
+      System.setProperty(ReflectRecordEncoding.GENERATE_BINDING, "false");
     }
   }
 
-  static <T> byte[] write(T custom) {
-    Schema schema = ReflectData.get().getSchema(custom.getClass());
+  static <T> byte[] write(boolean genTypes, T custom) {
+    return write(genTypes, custom.getClass(), custom);
+  }
 
-    ReflectDatumWriter<T> datumWriter = new ReflectDatumWriter<>();
+  static <T> byte[] write(boolean genTypes, Class<?> type, T custom) {
+    System.setProperty(ReflectRecordEncoding.GENERATE_BINDING, Boolean.toString(genTypes));
+    var reflectData = new ReflectData();
+
+    Schema schema = reflectData.getSchema(type);
+
+    ReflectDatumWriter<T> datumWriter = new ReflectDatumWriter<>(reflectData);
     try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataFileWriter<T> writer = new DataFileWriter<>(datumWriter)) {
       writer.create(schema, baos);
@@ -33,13 +44,18 @@ public class RecordReadWriteUtil {
       return baos.toByteArray();
     } catch (IOException e) {
       throw new UncheckedIOException(e);
+    } finally {
+      System.setProperty(ReflectRecordEncoding.GENERATE_BINDING, "false");
     }
   }
 
-  static <T> byte[] write(T custom, Class<?> asName) {
-    var schema = ReflectData.get().getSchema(custom.getClass());
+  static <T> byte[] write(boolean genTypes, T custom, Class<?> asName) {
 
-    var schemaAs = ReflectData.get().getSchema(asName);
+    System.setProperty(ReflectRecordEncoding.GENERATE_BINDING, Boolean.toString(genTypes));
+    var reflectData = new ReflectData();
+    var schema = reflectData.getSchema(custom.getClass());
+
+    var schemaAs = reflectData.getSchema(asName);
 
     var fields = schema.getFields().stream()
         .map(field -> new Schema.Field(field.name(), field.schema(), field.doc(), field.defaultVal(), field.order()))
@@ -48,7 +64,7 @@ public class RecordReadWriteUtil {
     schemaAs = Schema.createRecord(schemaAs.getName(), schemaAs.getDoc(), schemaAs.getNamespace(), schemaAs.isError(),
         fields);
 
-    ReflectDatumWriter<T> datumWriter = new ReflectDatumWriter<>();
+    ReflectDatumWriter<T> datumWriter = new ReflectDatumWriter<>(reflectData);
 
     try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataFileWriter<T> writer = new DataFileWriter<>(datumWriter)) {
@@ -59,6 +75,8 @@ public class RecordReadWriteUtil {
       return baos.toByteArray();
     } catch (IOException e) {
       throw new UncheckedIOException(e);
+    } finally {
+      System.setProperty(ReflectRecordEncoding.GENERATE_BINDING, "false");
     }
   }
 }

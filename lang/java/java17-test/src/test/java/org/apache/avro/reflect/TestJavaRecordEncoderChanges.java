@@ -25,12 +25,15 @@ import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.io.DatumReader;
 import org.junit.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.stream.Stream;
 
 import static org.junit.Assert.*;
 
@@ -39,11 +42,12 @@ import static org.apache.avro.reflect.RecordReadWriteUtil.write;
 
 public class TestJavaRecordEncoderChanges {
 
-  @Test
-  public void testBase() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testBase(boolean genTypes) throws IOException {
     Base in = new Base("hello world", 42);
-    byte[] encoded = write(in, Base.class);
-    Base decoded = read(encoded);
+    byte[] encoded = write(genTypes, in, Base.class);
+    Base decoded = read(genTypes, encoded);
 
     assertNotNull(decoded);
     assertEquals("hello world", decoded.field());
@@ -51,12 +55,17 @@ public class TestJavaRecordEncoderChanges {
 
   }
 
+  private static Stream<Arguments> testCompatibleTypeChangeParameters() {
+    return Stream.of(Arguments.of(false, BaseTypeChangeCompatible.class),
+        Arguments.of(true, BaseTypeChangeCompatible.class), Arguments.of(false, BaseTypeChangeCompatibleClass.class));
+  }
+
   @ParameterizedTest
-  @ValueSource(classes = { BaseTypeChangeCompatible.class, BaseTypeChangeCompatibleClass.class })
-  public void testCompatibleTypeChange(Class<?> type) throws IOException {
+  @MethodSource("testCompatibleTypeChangeParameters")
+  public void testCompatibleTypeChange(boolean genTypes, Class<?> type) throws IOException {
     Base in = new Base("hello world", 42);
-    byte[] encoded = write(in, type);
-    Compatible decoded = read(encoded);
+    byte[] encoded = write(genTypes, in, type);
+    Compatible decoded = read(genTypes, encoded);
 
     assertNotNull(decoded);
     assertEquals("hello world", decoded.field());
@@ -64,20 +73,30 @@ public class TestJavaRecordEncoderChanges {
 
   }
 
-  @ParameterizedTest
-  @ValueSource(classes = { BaseTypeChangeCastable.class, BaseTypeChangeCastableClass.class })
-  public void testCastableTypeChange(Class<?> type) {
-    Base in = new Base("hello world", 42);
-    byte[] encoded = write(in, type);
-    assertThrows(IllegalArgumentException.class, () -> read(encoded));
+  private static Stream<Arguments> testCastableTypeChangeParameters() {
+    return Stream.of(Arguments.of(false, BaseTypeChangeCastable.class),
+        Arguments.of(true, BaseTypeChangeCastable.class), Arguments.of(false, BaseTypeChangeCastableClass.class));
   }
 
   @ParameterizedTest
-  @ValueSource(classes = { BaseWithDefault.class, BaseWithDefaultClass.class })
-  public void testWithDefault(Class<?> type) throws IOException {
+  @MethodSource("testCastableTypeChangeParameters")
+  public void testCastableTypeChange(boolean genTypes, Class<?> type) {
     Base in = new Base("hello world", 42);
-    byte[] encoded = write(in, type);
-    Default decoded = read(encoded);
+    byte[] encoded = write(genTypes, in, type);
+    assertThrows(IllegalArgumentException.class, () -> read(genTypes, encoded));
+  }
+
+  private static Stream<Arguments> testWithDefaultParameters() {
+    return Stream.of(Arguments.of(false, BaseWithDefault.class), Arguments.of(true, BaseWithDefault.class),
+        Arguments.of(false, BaseWithDefaultClass.class));
+  }
+
+  @ParameterizedTest
+  @MethodSource("testWithDefaultParameters")
+  public void testWithDefault(boolean genTypes, Class<?> type) throws IOException {
+    Base in = new Base("hello world", 42);
+    byte[] encoded = write(genTypes, in, type);
+    Default decoded = read(genTypes, encoded);
 
     assertNotNull(decoded);
     assertEquals("hello world", decoded.field());
@@ -87,18 +106,20 @@ public class TestJavaRecordEncoderChanges {
 
   }
 
-  @Test
-  public void testWithRemovedField() {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testWithRemovedField(boolean genTypes) {
     Base in = new Base("hello world", 42);
-    byte[] encoded = write(in, BaseWithFieldRemoved.class);
-    assertThrows(AvroMissingFieldException.class, () -> read(encoded));
+    byte[] encoded = write(genTypes, in, BaseWithFieldRemoved.class);
+    assertThrows(AvroMissingFieldException.class, () -> read(genTypes, encoded));
   }
 
-  @Test
-  public void testWithRemovedFieldClass() {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testWithRemovedFieldClass(boolean genTypes) {
     Base in = new Base("hello world", 42);
-    byte[] encoded = write(in, BaseWithFieldRemovedClass.class);
-    assertThrows(NullPointerException.class, () -> read(encoded)); // exceptions don't match
+    byte[] encoded = write(genTypes, in, BaseWithFieldRemovedClass.class);
+    assertThrows(NullPointerException.class, () -> read(genTypes, encoded)); // exceptions don't match
   }
 
   public record Base(String field, long field2) {

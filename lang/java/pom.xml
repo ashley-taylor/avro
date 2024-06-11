@@ -38,6 +38,7 @@
 
     <!-- version properties for dependencies -->
     <ant.version>1.10.14</ant.version>
+    <asm.version>9.7</asm.version>
     <commons-cli.version>1.7.0</commons-cli.version>
     <commons-compress.version>1.26.2</commons-compress.version>
     <commons-text.version>1.12.0</commons-text.version>
@@ -620,6 +621,11 @@
         <artifactId>commons-lang3</artifactId>
         <version>${commons-lang3.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.ow2.asm</groupId>
+        <artifactId>asm</artifactId>
+        <version>${asm.version}</version>
+	</dependency>
     </dependencies>
   </dependencyManagement>
 

@@ -18,108 +18,111 @@
 
 package org.apache.avro.reflect;
 
-import org.apache.avro.Schema;
-import org.apache.avro.file.DataFileStream;
-import org.apache.avro.file.DataFileWriter;
-import org.apache.avro.file.DataFileWriter.AppendWriteException;
-import org.apache.avro.io.DatumReader;
-import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.Arrays;
 import java.util.Objects;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import static org.apache.avro.reflect.RecordReadWriteUtil.read;
 import static org.apache.avro.reflect.RecordReadWriteUtil.write;
 
 public class TestJavaRecordEncoderFastReaders {
 
-  @Test
-  public void testBoolean() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testBoolean(boolean genTypes) throws IOException {
     var in = new BooleanTypes(true, false);
-    byte[] encoded = write(in);
-    BooleanTypes out = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    BooleanTypes out = read(genTypes, encoded);
     assertEquals(in, out);
   }
 
-  @Test
-  public void testBytes() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testBytes(boolean genTypes) throws IOException {
     byte first = 1;
     byte second = 2;
     var in = new ByteTypes(first, second);
-    byte[] encoded = write(in);
-    ByteTypes out = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    ByteTypes out = read(genTypes, encoded);
     assertEquals(in, out);
   }
 
-  @Test
-  public void testCharacter() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testCharacter(boolean genTypes) throws IOException {
     var in = new CharacterTypes('a', 'B');
-    byte[] encoded = write(in);
-    CharacterTypes out = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    CharacterTypes out = read(genTypes, encoded);
     assertEquals(in, out);
   }
 
-  @Test
-  public void testInteger() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testInteger(boolean genTypes) throws IOException {
     var in = new IntegerTypes(1, 2);
-    byte[] encoded = write(in);
-    IntegerTypes out = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    IntegerTypes out = read(genTypes, encoded);
     assertEquals(in, out);
   }
 
-  @Test
-  public void testDouble() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testDouble(boolean genTypes) throws IOException {
     var in = new DoubleTypes(1D, 2D);
-    byte[] encoded = write(in);
-    DoubleTypes out = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    DoubleTypes out = read(genTypes, encoded);
     assertEquals(in, out);
   }
 
-  @Test
-  public void testShort() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testShort(boolean genTypes) throws IOException {
     short first = 1;
     short second = 2;
     var in = new ShortTypes(first, second);
-    byte[] encoded = write(in);
-    ShortTypes out = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    ShortTypes out = read(genTypes, encoded);
     assertEquals(in, out);
   }
 
-  @Test
-  public void testLong() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testLong(boolean genTypes) throws IOException {
     var in = new LongTypes(1L, 2L);
-    byte[] encoded = write(in);
-    LongTypes out = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    LongTypes out = read(genTypes, encoded);
     assertEquals(in, out);
   }
 
-  @Test
-  public void testFloat() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testFloat(boolean genTypes) throws IOException {
     var in = new FloatTypes(1F, 2F);
-    byte[] encoded = write(in);
-    FloatTypes out = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    FloatTypes out = read(genTypes, encoded);
     assertEquals(in, out);
   }
 
-  @Test
-  public void testObjects() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testObjects(boolean genTypes) throws IOException {
     var in = new ObjectType("String", new byte[] { 1, 2, 3 });
-    byte[] encoded = write(in);
-    ObjectType out = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    ObjectType out = read(genTypes, encoded);
     assertEquals(in, out);
   }
 
-  @Test
-  public void testArrayReader() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testArrayReader(boolean genTypes) throws IOException {
     var in = new ArrayReader(new String[] { "Hello", "World!" }, new int[] { 1, 2, 3 });
-    byte[] encoded = write(in);
-    ArrayReader out = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    ArrayReader out = read(genTypes, encoded);
     assertEquals(in, out);
   }
 
