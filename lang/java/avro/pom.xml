@@ -235,11 +235,6 @@
       <artifactId>zstd-jni</artifactId>
       <optional>true</optional>
     </dependency>
-	<dependency>
-      <groupId>org.ow2.asm</groupId>
-      <artifactId>asm</artifactId>
-      <optional>true</optional>
-	</dependency>
     <dependency>
       <groupId>org.hamcrest</groupId>
       <artifactId>hamcrest-library</artifactId>
