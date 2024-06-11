@@ -36,6 +36,7 @@ public class ReflectRecordEncoding extends CustomEncoding<Object> {
   private final RecordInstanceWriter writer;
 
   public ReflectRecordEncoding(Class<?> type) {
+
     this.type = type;
     this.writer = null;
     this.reader = null;
@@ -44,9 +45,7 @@ public class ReflectRecordEncoding extends CustomEncoding<Object> {
   public ReflectRecordEncoding(Class<?> type, Schema schema) {
     this.type = type;
     this.schema = schema;
-
     var fields = RecordFieldBuilder.buildFieldInfo(type, schema);
-
     try {
       if (generateBinding) {
         this.writer = new GenerateRecordInstanceWriter().generate(fields, type);

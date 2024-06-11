@@ -80,7 +80,6 @@ public class GenerateRecordInstanceWriter implements Opcodes {
   public RecordInstanceWriter generate(List<FieldInfo> fields, Class<?> type) throws ReflectiveOperationException {
     var packageName = "org.apache.avro.generated." + type.getPackageName();
     final String fullClassName = packageName + "." + type.getSimpleName() + "Writer";
-
     var bytes = dump(fullClassName, fields, type);
 
     var loader = new ClassLoader(type.getClassLoader()) {

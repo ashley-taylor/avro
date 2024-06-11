@@ -20,60 +20,59 @@ package org.apache.avro.reflect;
 
 import static org.apache.avro.reflect.RecordReadWriteUtil.read;
 import static org.apache.avro.reflect.RecordReadWriteUtil.write;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.Arrays;
 
 import org.apache.avro.Schema;
-import org.apache.avro.file.DataFileStream;
-import org.apache.avro.file.DataFileWriter;
-import org.apache.avro.io.DatumReader;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.Encoder;
-import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 public class TestJavaRecordAndCustomEncoder {
 
-  @Test
-  public void testRead() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testRead(boolean genTypes) throws IOException {
     var in = new CustomReadWrapper(new CustomRead("hello world"));
-    byte[] encoded = write(in);
-    CustomReadWrapper decoded = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    CustomReadWrapper decoded = read(genTypes, encoded);
 
     assertNotNull(decoded);
     assertEquals("Fixed", decoded.field().getField());
   }
 
-  @Test
-  public void testWrite() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testWrite(boolean genTypes) throws IOException {
     var in = new CustomWriteWrapper(new CustomWrite("hello world"));
-    byte[] encoded = write(in);
-    CustomWriteWrapper decoded = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    CustomWriteWrapper decoded = read(genTypes, encoded);
 
     assertNotNull(decoded);
     assertEquals("Override", decoded.field().getField());
   }
 
-  @Test
-  public void testWriteFiedEncoder() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testWriteFiedEncoder(boolean genTypes) throws IOException {
     var in = new CustomWriteWrapperWithEncoder(new CustomWrite("hello world"));
-    byte[] encoded = write(in);
-    CustomWriteWrapperWithEncoder decoded = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    CustomWriteWrapperWithEncoder decoded = read(genTypes, encoded);
 
     assertNotNull(decoded);
     assertEquals("Override2", decoded.field().getField());
   }
 
-  @Test
-  public void testReadFiedEncoder() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testReadFiedEncoder(boolean genTypes) throws IOException {
     var in = new CustomReadWrapperWithEncoder(new CustomRead("hello world"));
-    byte[] encoded = write(in);
-    CustomReadWrapperWithEncoder decoded = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    CustomReadWrapperWithEncoder decoded = read(genTypes, encoded);
 
     assertNotNull(decoded);
     assertEquals("Fixed2", decoded.field().getField());

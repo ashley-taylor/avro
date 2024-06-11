@@ -18,53 +18,47 @@
 
 package org.apache.avro.reflect;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThrows;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 
-import org.apache.avro.Schema;
-import org.apache.avro.file.DataFileStream;
-import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.file.DataFileWriter.AppendWriteException;
-import org.apache.avro.io.DatumReader;
-import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.apache.avro.reflect.RecordReadWriteUtil.read;
 import static org.apache.avro.reflect.RecordReadWriteUtil.write;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestJavaRecordEncoder {
 
-  @Test
-  public void testRecord() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testRecord(boolean genTypes) throws IOException {
     Custom in = new Custom("hello world");
-    byte[] encoded = write(in);
-    Custom decoded = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    Custom decoded = read(genTypes, encoded);
 
     assertNotNull(decoded);
     assertEquals("hello world", decoded.field());
   }
 
-  @Test
-  public void testRecordWithNulls() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testRecordWithNulls(boolean genTypes) throws IOException {
     var in = new CustomWithNull("hello world", null);
-    byte[] encoded = write(in);
-    CustomWithNull decoded = read(encoded);
+    byte[] encoded = write(genTypes, in);
+    CustomWithNull decoded = read(genTypes, encoded);
 
     assertNotNull(decoded);
     assertEquals("hello world", decoded.field());
-    assertEquals(null, decoded.field2());
+    assertNull(decoded.field2());
   }
 
-  @Test
-  public void testNonNullErrors() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testNonNullErrors(boolean genTypes) throws IOException {
     var in = new CustomWithNull(null, "pass");
     assertThrows(AppendWriteException.class, () -> {
-      write(in);
+      write(genTypes, in);
     });
   }
 

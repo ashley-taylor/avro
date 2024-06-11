@@ -18,68 +18,44 @@
 
 package org.apache.avro.reflect;
 
-import static org.junit.Assert.assertEquals;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.ArrayList;
+
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.avro.Schema;
-import org.apache.avro.file.DataFileStream;
-import org.apache.avro.file.DataFileWriter;
-import org.apache.avro.io.DatumReader;
-import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import static org.apache.avro.reflect.RecordReadWriteUtil.read;
+import static org.apache.avro.reflect.RecordReadWriteUtil.write;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestPolymorphicEncoding {
 
-  @Test
-  public void testPolymorphicEncoding() throws IOException {
-    List<Animal> expected = Arrays.asList(new Cat("Green"), new Dog(5));
-    byte[] encoded = write(Animal.class, expected);
-    List<Animal> decoded = read(encoded);
-
-    assertEquals(expected, decoded);
-  }
-
-  private <T> List<T> read(byte[] toDecode) throws IOException {
-    DatumReader<T> datumReader = new ReflectDatumReader<>();
-    try (DataFileStream<T> dataFileReader = new DataFileStream<>(new ByteArrayInputStream(toDecode, 0, toDecode.length),
-        datumReader);) {
-      List<T> toReturn = new ArrayList<>();
-      while (dataFileReader.hasNext()) {
-        toReturn.add(dataFileReader.next());
-      }
-      return toReturn;
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testPolymorphicEncoding(boolean genTypes) throws IOException {
+    var cat = new Cat("Green");
+    var dog = new Dog(5);
+    {
+      byte[] encoded = write(genTypes, Animal.class, cat);
+      Animal decoded = read(genTypes, encoded);
+      assertEquals(cat, decoded);
+    }
+    {
+      byte[] encoded = write(genTypes, Animal.class, dog);
+      Animal decoded = read(genTypes, encoded);
+      assertEquals(dog, decoded);
     }
   }
 
-  private <T> byte[] write(Class<?> type, List<T> custom) {
-    Schema schema = ReflectData.get().getSchema(type);
-    ReflectDatumWriter<T> datumWriter = new ReflectDatumWriter<>();
-    try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        DataFileWriter<T> writer = new DataFileWriter<>(datumWriter)) {
-      writer.create(schema, baos);
-      for (T c : custom) {
-        writer.append(c);
-      }
-      writer.flush();
-      return baos.toByteArray();
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
+  public sealed interface Animal permits Cat,Dog {
   }
 
-  public static sealed interface Animal permits Cat,Dog {
+  public record Dog(int size) implements Animal {
   }
 
-  public static record Dog(int size) implements Animal {
-  }
-
-  public static record Cat(String color) implements Animal {
+  public record Cat(String color) implements Animal {
   }
 
 }

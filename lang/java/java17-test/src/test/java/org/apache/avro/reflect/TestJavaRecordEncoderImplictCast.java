@@ -18,65 +18,60 @@
 
 package org.apache.avro.reflect;
 
-import org.apache.avro.AvroMissingFieldException;
-import org.apache.avro.Schema;
-import org.apache.avro.file.DataFileStream;
-import org.apache.avro.file.DataFileWriter;
-import org.apache.avro.io.DatumReader;
-import org.junit.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
-
-import static org.junit.Assert.*;
 
 import static org.apache.avro.reflect.RecordReadWriteUtil.read;
 import static org.apache.avro.reflect.RecordReadWriteUtil.write;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestJavaRecordEncoderImplictCast {
 
-  @Test
-  public void testUp1() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testUp1(boolean genTypes) throws IOException {
     Base in = new Base(1D, 2F, 3L, 4, (short) 5, (byte) 6, (char) 7);
-    byte[] encoded = write(in, Up1.class);
+    byte[] encoded = write(genTypes, in, Up1.class);
     var expected = new Up1(1D, 2.0, 3L, 4L, (char) 5, (short) 6, (byte) 7);
-    assertEquals(expected, read(encoded));
+    assertEquals(expected, read(genTypes, encoded));
   }
 
-  @Test
-  public void testUp2() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testUp2(boolean genTypes) throws IOException {
     Base in = new Base(1D, 2F, 3L, 4, (short) 5, (byte) 6, (char) 7);
-    byte[] encoded = write(in, Up2.class);
+    byte[] encoded = write(genTypes, in, Up2.class);
     var expected = new Up2(1D, 2.0, 3L, 4L, (char) 5, (short) 6, (byte) 7);
-    assertEquals(expected, read(encoded));
+    assertEquals(expected, read(genTypes, encoded));
   }
 
-  @Test
-  public void testUp3() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testUp3(boolean genTypes) throws IOException {
     Base in = new Base(1D, 2F, 3L, 4, (short) 5, (byte) 6, (char) 7);
-    byte[] encoded = write(in, Up3.class);
+    byte[] encoded = write(genTypes, in, Up3.class);
     var expected = new Up3(1D, 2.0, 3L, 4L, (char) 5, (short) 6, (byte) 7);
-    assertEquals(expected, read(encoded));
+    assertEquals(expected, read(genTypes, encoded));
   }
 
-  @Test
-  public void testSide1() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testSide1(boolean genTypes) throws IOException {
     Base in = new Base(1D, 2F, 3L, 4, (short) 5, (byte) 6, (char) 7);
-    byte[] encoded = write(in, Side1.class);
+    byte[] encoded = write(genTypes, in, Side1.class);
     var expected = new Side1(1D, 2.0F, 3L, 4L, (char) 5, (short) 6, (byte) 7);
-    assertEquals(expected, read(encoded));
+    assertEquals(expected, read(genTypes, encoded));
   }
 
-  @Test
-  public void testSide2() throws IOException {
+  @ParameterizedTest
+  @ValueSource(booleans = { false, true })
+  public void testSide2(boolean genTypes) throws IOException {
     Base in = new Base(1D, 2F, 3L, 4, (short) 5, (byte) 6, (char) 7);
-    byte[] encoded = write(in, Side2.class);
+    byte[] encoded = write(genTypes, in, Side2.class);
     var expected = new Side2(1D, 2.0F, 3L, 4L, (char) 5, (short) 6, (byte) 7);
-    assertEquals(expected, read(encoded));
+    assertEquals(expected, read(genTypes, encoded));
   }
 
   public record Base(double field1, float field2, long field3, int field4, short field5, byte field6, char field7) {
