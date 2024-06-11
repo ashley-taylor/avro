@@ -21,7 +21,7 @@ public class RecordReadWriteUtil {
     }
   }
 
-  static <T> byte[] write(T custom) {
+  static <T> byte[] write( T custom) {
     Schema schema = ReflectData.get().getSchema(custom.getClass());
 
     ReflectDatumWriter<T> datumWriter = new ReflectDatumWriter<>();

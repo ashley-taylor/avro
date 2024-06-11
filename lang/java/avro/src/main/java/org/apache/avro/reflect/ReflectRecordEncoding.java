@@ -27,6 +27,10 @@ import org.apache.avro.io.ResolvingDecoder;
 
 public class ReflectRecordEncoding extends CustomEncoding<Object> {
 
+  public static final String GENERATE_BINDING = "org.apache.avro.generatebinding";
+
+  private final boolean generateBinding = "true".equalsIgnoreCase(System.getProperty(GENERATE_BINDING));
+
   private final Class<?> type;
   private final RecordInstanceReader reader;
   private final RecordInstanceWriter writer;
@@ -44,8 +48,15 @@ public class ReflectRecordEncoding extends CustomEncoding<Object> {
     var fields = RecordFieldBuilder.buildFieldInfo(type, schema);
 
     try {
+      if (generateBinding) {
+        this.writer = new GenerateRecordInstanceWriter().generate(fields, type);
+        this.reader = new GenerateRecordInstanceReader().generate(fields,
+            RecordFieldBuilder.getRecordConstructor(type));
+
+      } else {
         this.writer = new ReflectionRecordInstanceWriter(fields);
         this.reader = new ReflectionRecordInstanceReader(fields, RecordFieldBuilder.getRecordConstructor(type));
+      }
     } catch (ReflectiveOperationException e) {
       throw new AvroRuntimeException(e);
     }

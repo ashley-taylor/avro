@@ -31,19 +31,26 @@
   <name>Avro Java 17 Tests</name>
   <description>Unit tests that require java 17 language support.</description>
   <url>https://avro.apache.org/</url>
+
   <properties>
     <maven.compiler.target>17</maven.compiler.target>
     <maven.compiler.source>17</maven.compiler.source>
     <maven.compiler.release>17</maven.compiler.release>
     <main.basedir>${project.parent.parent.basedir}</main.basedir>
   </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.ow2.asm</groupId>
+      <artifactId>asm</artifactId>
+    </dependency>
   </dependencies>
+
   <build>
     <plugins>
       <plugin>
