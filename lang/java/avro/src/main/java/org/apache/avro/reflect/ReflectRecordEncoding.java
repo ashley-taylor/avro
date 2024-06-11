@@ -44,8 +44,8 @@ public class ReflectRecordEncoding extends CustomEncoding<Object> {
     var fields = RecordFieldBuilder.buildFieldInfo(type, schema);
 
     try {
-        this.writer = new ReflectionRecordInstanceWriter(fields);
-        this.reader = new ReflectionRecordInstanceReader(fields, RecordFieldBuilder.getRecordConstructor(type));
+      this.writer = new ReflectionRecordInstanceWriter(fields);
+      this.reader = new ReflectionRecordInstanceReader(fields, RecordFieldBuilder.getRecordConstructor(type));
     } catch (ReflectiveOperationException e) {
       throw new AvroRuntimeException(e);
     }
