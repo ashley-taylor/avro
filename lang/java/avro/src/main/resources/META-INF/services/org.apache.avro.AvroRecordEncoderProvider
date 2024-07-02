@@ -15,4 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-org.apache.avro.generator.AsmAvroRecordEncoderProvider
+org.apache.avro.specific.CustomEncoderRecordEncoderProvider
+org.apache.avro.reflect.ReflectJavaRecordEncoderProvider
+
