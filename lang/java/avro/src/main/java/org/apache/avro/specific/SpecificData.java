@@ -32,6 +32,8 @@ import org.apache.avro.io.EncoderFactory;
 import org.apache.avro.reflect.AvroEncode;
 import org.apache.avro.reflect.CustomEncoding;
 import org.apache.avro.reflect.ReflectRecordEncoding;
+import org.apache.avro.AvroRecordEncoderGenerator;
+import org.apache.avro.AvroRecordEncoderProvider;
 import org.apache.avro.util.ClassUtils;
 import org.apache.avro.util.MapUtil;
 import org.apache.avro.util.SchemaUtil;
@@ -44,16 +46,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.WeakHashMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
@@ -166,14 +159,23 @@ public class SpecificData extends GenericData {
   protected Set<Class> stringableClasses = new HashSet<>(Arrays.asList(java.math.BigDecimal.class,
       java.math.BigInteger.class, java.net.URI.class, java.net.URL.class, java.io.File.class));
 
+  private final AvroRecordEncoderGenerator encoderGenerator;
+
   /** For subclasses. Applications normally use {@link SpecificData#get()}. */
   public SpecificData() {
+    this(null);
   }
 
   /** Construct with a specific classloader. */
   public SpecificData(ClassLoader classLoader) {
     super(classLoader);
+
+    encoderGenerator = ServiceLoader.load(AvroRecordEncoderProvider.class).findFirst().map(provider -> provider.create(classLoader, this::provideCustomEncoder)).orElse(null);
+
   }
+
+
+
 
   @Override
   public DatumReader createDatumReader(Schema schema) {
@@ -472,12 +474,21 @@ public class SpecificData extends GenericData {
     }
   }
 
-  private static CustomEncoding<?> extractCustomEncoder(Schema schema, Class<?> c) {
+  private CustomEncoding<?> extractCustomEncoder(Schema schema, Class<?> c) {
     CustomEncoding<?> customEncoding = getCustomEncoding(c);
     try {
       if (customEncoding != null) {
         return customEncoding.setSchema(schema);
-      } else if (IS_RECORD_METHOD != null && IS_RECORD_METHOD.invoke(c).equals(true)) {
+      }
+
+      if(encoderGenerator != null) {
+        var generated = encoderGenerator.get(schema, c);
+        if(generated.isPresent()) {
+          return generated.get();
+        }
+      }
+
+      if (IS_RECORD_METHOD != null && IS_RECORD_METHOD.invoke(c).equals(true)) {
         return new ReflectRecordEncoding(c).setSchema(schema);
       }
     } catch (ReflectiveOperationException e) {
@@ -491,29 +502,52 @@ public class SpecificData extends GenericData {
     if (name == null)
       return NO_CLASS;
     return MapUtil.computeIfAbsent(classCache, name, n -> {
-      try {
-        Class c = ClassUtils.forName(getClassLoader(), getClassName(schema));
-        CustomEncoding customEncoding = extractCustomEncoder(schema, c);
-        return new ClassWrapper(c, customEncoding);
-      } catch (ClassNotFoundException e) {
-        // This might be a nested namespace. Try using the last tokens in the
-        // namespace as an enclosing class by progressively replacing period
-        // delimiters with $
-        StringBuilder nestedName = new StringBuilder(n);
-        int lastDot = n.lastIndexOf('.');
-        while (lastDot != -1) {
-          nestedName.setCharAt(lastDot, '$');
-          try {
-            Class c = ClassUtils.forName(getClassLoader(), nestedName.toString());
-            CustomEncoding customEncoding = extractCustomEncoder(schema, c);
-            return new ClassWrapper(c, customEncoding);
-          } catch (ClassNotFoundException ignored) {
-          }
-          lastDot = n.lastIndexOf('.', lastDot - 1);
-        }
-        return NO_CLASS;
-      }
+      return getClassWrapper(schema, n);
     });
+  }
+
+  private ClassWrapper getClassWrapper(Schema schema, String name) {
+    try {
+      Class c = ClassUtils.forName(getClassLoader(), getClassName(schema));
+      CustomEncoding customEncoding = extractCustomEncoder(schema, c);
+      return new ClassWrapper(c, customEncoding);
+    } catch (ClassNotFoundException e) {
+      // This might be a nested namespace. Try using the last tokens in the
+      // namespace as an enclosing class by progressively replacing period
+      // delimiters with $
+      StringBuilder nestedName = new StringBuilder(name);
+      int lastDot = name.lastIndexOf('.');
+      while (lastDot != -1) {
+        nestedName.setCharAt(lastDot, '$');
+        try {
+          Class c = ClassUtils.forName(getClassLoader(), nestedName.toString());
+          CustomEncoding customEncoding = extractCustomEncoder(schema, c);
+          return new ClassWrapper(c, customEncoding);
+        } catch (ClassNotFoundException ignored) {
+        }
+        lastDot = name.lastIndexOf('.', lastDot - 1);
+      }
+      return NO_CLASS;
+    }
+  }
+
+  /**
+   * doesn't populate the cache to prevent circular creation
+   */
+  private CustomEncoding<?> provideCustomEncoder(Schema schema) {
+    switch (schema.getType()) {
+    case FIXED:
+    case RECORD:
+    case ENUM:
+      String name = schema.getFullName();
+      ClassWrapper c = classCache.get(name);
+      if(c == null) {
+        c = getClassWrapper(schema, name);
+      }
+      return c == NO_CLASS ? null : c.getCustomEncoding();
+    default:
+      return null;
+    }
   }
 
   public CustomEncoding<?> getCustomEncoding(Schema schema) {
