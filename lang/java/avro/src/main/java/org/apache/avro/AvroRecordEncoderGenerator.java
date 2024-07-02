@@ -21,9 +21,7 @@ import org.apache.avro.reflect.CustomEncoding;
 
 import java.util.Optional;
 
-
 public interface AvroRecordEncoderGenerator {
 
-
-  Optional<CustomEncoding<?>> get(Schema schema, Class<?> c);
+  Optional<CustomEncoding<?>> get(Class<?> c, Optional<Schema> schema);
 }

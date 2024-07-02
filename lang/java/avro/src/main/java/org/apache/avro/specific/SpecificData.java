@@ -46,10 +46,11 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.nio.ByteBuffer;
-import java.util.*;
+
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /** Utilities for generated Java classes and interfaces. */
 public class SpecificData extends GenericData {
@@ -58,20 +59,6 @@ public class SpecificData extends GenericData {
 
   private static final Class<?>[] NO_ARG = new Class[] {};
   private static final Class<?>[] SCHEMA_ARG = new Class[] { Schema.class };
-
-  private static final Method IS_RECORD_METHOD;
-
-  static {
-    Class<? extends Class> classClass = SpecificData.class.getClass();
-    Method isRecord;
-    try {
-      isRecord = classClass.getMethod("isRecord");
-    } catch (NoSuchMethodException e) {
-      isRecord = null;
-    }
-    IS_RECORD_METHOD = isRecord;
-
-  }
 
   private static final Function<Class<?>, Constructor<?>> CTOR_CACHE = new ClassValueCache<>(c -> {
     boolean useSchema = SchemaConstructable.class.isAssignableFrom(c);
@@ -159,7 +146,7 @@ public class SpecificData extends GenericData {
   protected Set<Class> stringableClasses = new HashSet<>(Arrays.asList(java.math.BigDecimal.class,
       java.math.BigInteger.class, java.net.URI.class, java.net.URL.class, java.io.File.class));
 
-  private final AvroRecordEncoderGenerator encoderGenerator;
+  private final List<AvroRecordEncoderGenerator> encoderGenerator;
 
   /** For subclasses. Applications normally use {@link SpecificData#get()}. */
   public SpecificData() {
@@ -170,12 +157,11 @@ public class SpecificData extends GenericData {
   public SpecificData(ClassLoader classLoader) {
     super(classLoader);
 
-    encoderGenerator = ServiceLoader.load(AvroRecordEncoderProvider.class).findFirst().map(provider -> provider.create(classLoader, this::provideCustomEncoder)).orElse(null);
+    encoderGenerator = ServiceLoader.load(AvroRecordEncoderProvider.class).stream().map(ServiceLoader.Provider::get)
+        .sorted(Comparator.comparing(AvroRecordEncoderProvider::priority)).map(provider -> provider.create(this))
+        .collect(Collectors.toList());
 
   }
-
-
-
 
   @Override
   public DatumReader createDatumReader(Schema schema) {
@@ -430,69 +416,12 @@ public class SpecificData extends GenericData {
     }
   }
 
-  private static AvroEncode getAvroEncode(Class<?> c) {
-    while (c != null && !c.equals(Object.class)) {
-      AvroEncode avroEncode = c.getAnnotation(AvroEncode.class);
-      if (avroEncode != null) {
-        return avroEncode;
+  protected CustomEncoding<?> extractCustomEncoder(Class<?> c, Optional<Schema> schema) {
+    for (var encoder : this.encoderGenerator) {
+      var generated = encoder.get(c, schema);
+      if (generated.isPresent()) {
+        return generated.get();
       }
-      if (c.getSuperclass() != null) {
-        avroEncode = getAvroEncode(c.getSuperclass());
-      }
-      if (avroEncode != null) {
-        return avroEncode;
-      }
-      for (Class<?> inter : c.getInterfaces()) {
-        avroEncode = getAvroEncode(inter);
-        if (avroEncode != null) {
-          return avroEncode;
-        }
-      }
-      c = c.getSuperclass();
-    }
-
-    return null;
-
-  }
-
-  protected static CustomEncoding<?> getCustomEncoding(Class<?> c) {
-    try {
-      AvroEncode avroEncode = getAvroEncode(c);
-      if (avroEncode != null) {
-        // first see if constructor that takes the class as an argument exists
-        try {
-          return avroEncode.using().getDeclaredConstructor(Class.class).newInstance(c);
-        } catch (NoSuchMethodException e) {
-          // zero argument constructor
-          return avroEncode.using().getDeclaredConstructor().newInstance();
-        }
-      } else {
-        return null;
-      }
-    } catch (ReflectiveOperationException e) {
-      throw new AvroRuntimeException(e);
-    }
-  }
-
-  private CustomEncoding<?> extractCustomEncoder(Schema schema, Class<?> c) {
-    CustomEncoding<?> customEncoding = getCustomEncoding(c);
-    try {
-      if (customEncoding != null) {
-        return customEncoding.setSchema(schema);
-      }
-
-      if(encoderGenerator != null) {
-        var generated = encoderGenerator.get(schema, c);
-        if(generated.isPresent()) {
-          return generated.get();
-        }
-      }
-
-      if (IS_RECORD_METHOD != null && IS_RECORD_METHOD.invoke(c).equals(true)) {
-        return new ReflectRecordEncoding(c).setSchema(schema);
-      }
-    } catch (ReflectiveOperationException e) {
-      throw new AvroRuntimeException(e);
     }
     return null;
   }
@@ -509,7 +438,7 @@ public class SpecificData extends GenericData {
   private ClassWrapper getClassWrapper(Schema schema, String name) {
     try {
       Class c = ClassUtils.forName(getClassLoader(), getClassName(schema));
-      CustomEncoding customEncoding = extractCustomEncoder(schema, c);
+      CustomEncoding customEncoding = extractCustomEncoder(c, Optional.of(schema));
       return new ClassWrapper(c, customEncoding);
     } catch (ClassNotFoundException e) {
       // This might be a nested namespace. Try using the last tokens in the
@@ -521,32 +450,13 @@ public class SpecificData extends GenericData {
         nestedName.setCharAt(lastDot, '$');
         try {
           Class c = ClassUtils.forName(getClassLoader(), nestedName.toString());
-          CustomEncoding customEncoding = extractCustomEncoder(schema, c);
+          CustomEncoding customEncoding = extractCustomEncoder(c, Optional.of(schema));
           return new ClassWrapper(c, customEncoding);
         } catch (ClassNotFoundException ignored) {
         }
         lastDot = name.lastIndexOf('.', lastDot - 1);
       }
       return NO_CLASS;
-    }
-  }
-
-  /**
-   * doesn't populate the cache to prevent circular creation
-   */
-  private CustomEncoding<?> provideCustomEncoder(Schema schema) {
-    switch (schema.getType()) {
-    case FIXED:
-    case RECORD:
-    case ENUM:
-      String name = schema.getFullName();
-      ClassWrapper c = classCache.get(name);
-      if(c == null) {
-        c = getClassWrapper(schema, name);
-      }
-      return c == NO_CLASS ? null : c.getCustomEncoding();
-    default:
-      return null;
     }
   }
 

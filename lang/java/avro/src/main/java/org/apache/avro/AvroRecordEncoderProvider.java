@@ -41,6 +41,7 @@ import java.util.function.Function;
  */
 public interface AvroRecordEncoderProvider {
 
-  AvroRecordEncoderGenerator create(ClassLoader classLoader, Function<Schema, CustomEncoding<?>> extractEncoder);
+  AvroRecordEncoderGenerator create(SpecificData specificData);
 
+  int priority();
 }

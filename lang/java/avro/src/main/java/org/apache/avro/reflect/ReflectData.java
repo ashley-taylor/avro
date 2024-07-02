@@ -53,17 +53,7 @@ import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.WeakHashMap;
+
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -702,7 +692,7 @@ public class ReflectData extends SpecificData {
       AvroSchema explicit = c.getAnnotation(AvroSchema.class);
       if (explicit != null) // explicit schema
         return new Schema.Parser().parse(explicit.value());
-      CustomEncoding<?> custom = getCustomEncoding(c);
+      CustomEncoding<?> custom = extractCustomEncoder(c, Optional.empty());
       // if custom encoding does not specify the schema use the default schema
       if (custom != null && custom.getSchema() != null) {
         return custom.getSchema();
